@@ -302,14 +302,20 @@ const onEachFeature = (feature, layer) => {
       const mid = Math.floor(latlngs.length / 2)
       const p1 = latlngs[Math.max(0, mid - 1)]
       const p2 = latlngs[Math.min(latlngs.length - 1, mid)]
-      const angle = Math.atan2(p2.lng - p1.lng, p2.lat - p1.lat) * 180 / Math.PI
-      const arrow = L.marker([(p1.lat + p2.lat) / 2, (p1.lng + p2.lng) / 2], {
+      // bearing: 0 = North, 90 = East (atan2(dlng, dlat))
+      const bearing = Math.atan2(p2.lng - p1.lng, p2.lat - p1.lat) * 180 / Math.PI
+      // ▶ points East (90°) at 0° CSS rotation, so subtract 90 to align bearing
+      const cssAngle = bearing - 90
+      const midLat = (p1.lat + p2.lat) / 2
+      const midLng = (p1.lng + p2.lng) / 2
+      const arrow = L.marker([midLat, midLng], {
         icon: L.divIcon({
-          html: `<span style="display:inline-block;transform:rotate(${angle}deg);font-size:10px;color:#555;text-shadow:0 0 2px #fff;line-height:1;">▶</span>`,
-          iconSize: [10, 10],
+          html: `<span style="display:inline-block;transform:rotate(${cssAngle}deg);font-size:12px;color:#222;text-shadow:0 0 3px #fff,0 0 3px #fff;line-height:1;font-weight:bold;">▶</span>`,
+          iconSize: [12, 12],
           className: '',
         }),
         interactive: false,
+        zIndexOffset: 1000,
       })
       layer.on('add', function() {
         if (this._map) arrow.addTo(this._map)
