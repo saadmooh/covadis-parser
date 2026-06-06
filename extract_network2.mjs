@@ -9,6 +9,7 @@ const RELEVANT_LAYERS = new Set([
   'assai',
   'assai 250',
   'pvc 200',
+  'New_EU 1_Canalisations_Pen_No__14',
 ]);
 
 const ENTITY_TYPES = new Set(['INSERT', 'LWPOLYLINE', 'MTEXT', 'TEXT', 'LINE']);
@@ -43,8 +44,7 @@ function parseRelevantEntities(text) {
   const lines = text.split('\n');
   let i = 0;
 
-  function nextLine() { return i < lines.length ? lines[i++].trimEnd() : null; }
-  function peekGroup() { return i < lines.length ? parseInt(lines[i]) : null; }
+  function nextLine() { return i < lines.length ? lines[i++].trim() : null; }
   function expectCode(code) {
     const c = nextLine();
     if (c === null) return false;
@@ -121,7 +121,9 @@ function parseRelevantEntities(text) {
         }
       }
 
-      if (RELEVANT_LAYERS.has(layer)) {
+      const isProfileLayer = /^EU\s+1_PL_.*_Textes$/.test(layer);
+
+      if (RELEVANT_LAYERS.has(layer) || (isProfileLayer && entityType === 'TEXT')) {
         switch (entityType) {
           case 'INSERT':
             entities.push({ layer, type: 'INSERT', x: insertData.x, y: insertData.y, block: insertData.block, rotation: insertData.rotation });
@@ -164,8 +166,6 @@ function processFile(filepath, label) {
   console.log(`Parsing entities (${(buf.length / 1024 / 1024).toFixed(0)} MB)...`);
   const entities = parseRelevantEntities(text);
   console.log(`Found ${entities.length} relevant entities`);
-  // free the big string
-  text = null;
 
   // ========== 1. MANHOLES ==========
   const inserts = entities.filter(e => e.layer === 'EU 1_Regards' && e.type === 'INSERT');
