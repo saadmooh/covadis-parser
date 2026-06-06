@@ -296,9 +296,25 @@ const onEachFeature = (feature, layer) => {
     if (pente) html += `${pente}`
     html += '</div>'
     layer.bindPopup(html, { maxWidth: 250 })
-    layer.bindTooltip(`DN ${p.diam_mm}`, {
-      permanent: true, direction: 'top', offset: [0, -10], className: 'pipe-label',
-    })
+    // Add flow direction arrow at midpoint
+    const latlngs = layer.getLatLngs()
+    if (latlngs && latlngs.length >= 2) {
+      const mid = Math.floor(latlngs.length / 2)
+      const p1 = latlngs[Math.max(0, mid - 1)]
+      const p2 = latlngs[Math.min(latlngs.length - 1, mid)]
+      const angle = Math.atan2(p2.lng - p1.lng, p2.lat - p1.lat) * 180 / Math.PI
+      const arrow = L.marker([(p1.lat + p2.lat) / 2, (p1.lng + p2.lng) / 2], {
+        icon: L.divIcon({
+          html: `<span style="display:inline-block;transform:rotate(${angle}deg);font-size:10px;color:#555;text-shadow:0 0 2px #fff;line-height:1;">▶</span>`,
+          iconSize: [10, 10],
+          className: '',
+        }),
+        interactive: false,
+      })
+      layer.on('add', function() {
+        if (this._map) arrow.addTo(this._map)
+      })
+    }
   } else if (p.type === 'assai_noeud') {
     layer.bindPopup('<div class="popup-content"><strong>Nœud assai</strong><br/>Réseau secondaire</div>', { maxWidth: 250 })
   } else if (p.type === 'assai_tuyau') {
@@ -394,10 +410,11 @@ const pointToLayer = (feature, latlng) => {
   if (hasId) {
     const invert = p.profileInvert ? `R=${p.profileInvert.toFixed(2)}` : ''
     marker.bindTooltip(p.profileId + (invert ? ` | ${invert}` : ''), {
-      permanent: true,
+      permanent: false,
       direction: 'top',
       offset: [0, -8],
       className: 'manhole-label',
+      sticky: true,
     })
   }
 
