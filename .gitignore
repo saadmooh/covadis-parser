@@ -26,3 +26,6 @@ dist-ssr
 # Large data files
 *.dxf
 network2_data.json
+
+# GitHub workflow (token lacks workflow scope)
+.github/workflows/
