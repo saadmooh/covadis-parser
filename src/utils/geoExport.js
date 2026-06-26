@@ -10,7 +10,62 @@ function toLatLng(x, y, crsCode) {
   return { lat: t[1], lng: t[0] }
 }
 
+function hasCivil3dData(data) {
+  return data && (data.pipes?.length > 0 || data.structures?.length > 0) && !data.planPipes
+}
+
 export function toGeoJSON(data, crsCode = 'EPSG:32631') {
+  if (hasCivil3dData(data)) return toCivil3dGeoJSON(data, crsCode)
+  return toCovadisGeoJSON(data, crsCode)
+}
+
+function toCivil3dGeoJSON(data, crsCode) {
+  const features = []
+
+  for (const p of (data.pipes || [])) {
+    if (!p.vertices || p.vertices.length < 2) continue
+    const coords = p.vertices.map(v => {
+      const ll = toLatLng(v[0], v[1], crsCode)
+      return [ll.lng, ll.lat]
+    })
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: coords },
+      properties: { type: 'civil3d_pipe', network: p.network, handle: p.handle, length_m: p.length_m, layer: p.layer },
+    })
+  }
+
+  for (const s of (data.structures || [])) {
+    const ll = toLatLng(s.x, s.y, crsCode)
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [ll.lng, ll.lat] },
+      properties: { type: 'civil3d_structure', network: s.network, handle: s.handle, layer: s.layer },
+    })
+  }
+
+  for (const l of (data.labels || [])) {
+    const ll = toLatLng(l.x, l.y, crsCode)
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [ll.lng, ll.lat] },
+      properties: { type: 'civil3d_label', text: l.text, handle: l.handle, layer: l.layer },
+    })
+  }
+
+  for (const b of (data.blocks || [])) {
+    const ll = toLatLng(b.x, b.y, crsCode)
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [ll.lng, ll.lat] },
+      properties: { type: 'civil3d_block', block: b.block, layer: b.layer },
+    })
+  }
+
+  return { type: 'FeatureCollection', features }
+}
+
+function toCovadisGeoJSON(data, crsCode) {
   const features = []
 
   // Labelled pipes matched to plan geometries

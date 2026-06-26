@@ -3,6 +3,9 @@ import { MapContainer, TileLayer, GeoJSON, useMap, useMapEvents } from 'react-le
 import L from 'leaflet'
 import proj4 from 'proj4'
 import { toDxfString } from '../utils/dxfWriter'
+import { toEpanetInp } from '../utils/epanetWriter'
+import { parseEpanetInp } from '../utils/epanetParser'
+import { updateCovadisFromEpanet } from '../utils/covadisUpdater'
 import 'leaflet/dist/leaflet.css'
 
 const CRS_OPTIONS = [
@@ -50,6 +53,48 @@ function FitBounds({ geoJSON }) {
 
 function transformFeatures(data, crsCode) {
   const features = []
+
+  // Civil 3D data
+  if (isCivil3d(data)) {
+    for (const p of (data.pipes || [])) {
+      if (!p.vertices || p.vertices.length < 2) continue
+      const coords = p.vertices.map(v => {
+        const ll = toLatLng(v[0], v[1], crsCode)
+        return [ll.lng, ll.lat]
+      })
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: coords },
+        properties: { type: 'civil3d_pipe', network: p.network, handle: p.handle, length_m: p.length_m, layer: p.layer },
+      })
+    }
+    for (const s of (data.structures || [])) {
+      const ll = toLatLng(s.x, s.y, crsCode)
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [ll.lng, ll.lat] },
+        properties: { type: 'civil3d_structure', network: s.network, handle: s.handle, layer: s.layer },
+      })
+    }
+    for (const l of (data.labels || [])) {
+      const ll = toLatLng(l.x, l.y, crsCode)
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [ll.lng, ll.lat] },
+        properties: { type: 'civil3d_label', text: l.text, handle: l.handle, layer: l.layer },
+      })
+    }
+    for (const b of (data.blocks || [])) {
+      const ll = toLatLng(b.x, b.y, crsCode)
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [ll.lng, ll.lat] },
+        properties: { type: 'civil3d_block', block: b.block, layer: b.layer },
+      })
+    }
+    return { type: 'FeatureCollection', features }
+  }
+
   for (const seg of data.profileSegments || []) {
     const s = toLatLng(seg.start.x, seg.start.y, crsCode)
     const e = toLatLng(seg.end.x, seg.end.y, crsCode)
@@ -137,6 +182,10 @@ function transformFeatures(data, crsCode) {
 
 const pipeStyle = (feature) => {
   const p = feature.properties
+  if (p.type === 'civil3d_pipe') {
+    const color = p.network === 'storm' ? '#2196F3' : '#4CAF50'
+    return { color, weight: 4, opacity: 0.85 }
+  }
   if (p.type === 'pipe_plan') return { color: '#888', weight: 2, opacity: 0.4, dashArray: '4 4' }
   if (p.type === 'pipe_label') {
     const color = p.diam_mm >= 400 ? '#d62728' : (p.diam_mm >= 315 ? '#2c7bb6' : (p.diam_mm >= 200 ? '#fdae61' : '#1b9e77'))
@@ -156,7 +205,16 @@ const pipeStyle = (feature) => {
 
 const onEachFeature = (feature, layer) => {
   const p = feature.properties
-  if (p.type === 'pipe_plan') {
+  if (p.type === 'civil3d_pipe') {
+    const len = p.length_m ? `${p.length_m.toFixed(1)} m` : ''
+    layer.bindPopup(`<div class="popup-content"><strong>Conduite ${p.network}</strong><br/>Calque: ${p.layer}<br/>${len ? `Longueur: ${len}` : ''}<br/>Handle: ${p.handle}</div>`, { maxWidth: 250 })
+  } else if (p.type === 'civil3d_structure') {
+    layer.bindPopup(`<div class="popup-content"><strong>Ouvrage ${p.network}</strong><br/>Calque: ${p.layer}<br/>Handle: ${p.handle}</div>`, { maxWidth: 250 })
+  } else if (p.type === 'civil3d_label') {
+    layer.bindPopup(`<div class="popup-content"><strong>Étiquette</strong><br/>${p.text}<br/>Calque: ${p.layer}</div>`, { maxWidth: 250 })
+  } else if (p.type === 'civil3d_block') {
+    layer.bindPopup(`<div class="popup-content"><strong>Bloc</strong><br/>Nom: ${p.block}<br/>Calque: ${p.layer}</div>`, { maxWidth: 250 })
+  } else if (p.type === 'pipe_plan') {
     layer.bindPopup('<div class="popup-content"><em>Tracé EU 1 (données non associées)</em></div>', { maxWidth: 250 })
   } else if (p.type === 'pipe_label') {
     const diamLabel = p.diam_mm ? `DN ${p.diam_mm} mm` : '?'
@@ -237,6 +295,12 @@ const onEachFeature = (feature, layer) => {
 
 const pointToLayer = (feature, latlng) => {
   const p = feature.properties
+  if (p.type === 'civil3d_structure') {
+    const color = p.network === 'storm' ? '#2196F3' : '#4CAF50'
+    return L.circleMarker(latlng, { radius: 7, fillColor: color, color: '#0d47a1', weight: 2, fillOpacity: 0.85 })
+  }
+  if (p.type === 'civil3d_label') return L.circleMarker(latlng, { radius: 4, fillColor: '#ff9800', color: '#e65100', weight: 1, fillOpacity: 0.7 })
+  if (p.type === 'civil3d_block') return L.circleMarker(latlng, { radius: 5, fillColor: '#9c27b0', color: '#4a148c', weight: 1, fillOpacity: 0.7 })
   if (p.type === 'assai_noeud') return L.circleMarker(latlng, { radius: 5, fillColor: '#8e44ad', color: '#4a235a', weight: 2, fillOpacity: 0.8 })
   if (p.type === 'aep_noeud') return L.circleMarker(latlng, { radius: 6, fillColor: '#1f78b4', color: '#0d3b66', weight: 2, fillOpacity: 0.8 })
   if (p.type === 'new_eu1_noeud') return L.circleMarker(latlng, { radius: 5, fillColor: '#2ca02c', color: '#1a5e1a', weight: 2, fillOpacity: 0.8 })
@@ -367,7 +431,11 @@ function EditInteraction({ editMode, editTool, setDialogData, setEditManholes, s
   return null
 }
 
-export default function MapView({ data }) {
+function isCivil3d(data) {
+  return data && (data.pipes?.length > 0 || data.structures?.length > 0) && !data.planPipes
+}
+
+export default function MapView({ data, format, dxfContent, fileName }) {
   const [crsCode, setCrsCode] = useState('EPSG:32631')
   const [editMode, setEditMode] = useState(false)
   const [editTool, setEditTool] = useState(null)
@@ -377,6 +445,13 @@ export default function MapView({ data }) {
   const [dialogData, setDialogData] = useState(null)
   const [nextId, setNextId] = useState(1)
   const [editInitialized, setEditInitialized] = useState(false)
+  // AEP editing state
+  const [aepEditMode, setAepEditMode] = useState(false)
+  const [editAepPipes, setEditAepPipes] = useState([])
+  const [editDnPipes, setEditDnPipes] = useState([])
+  const [editAepNodes, setEditAepNodes] = useState([])
+  const [aepDialogData, setAepDialogData] = useState(null)
+  const [aepEditInitialized, setAepEditInitialized] = useState(false)
 
   useEffect(() => {
     if (data && !editInitialized) {
@@ -388,7 +463,118 @@ export default function MapView({ data }) {
     }
   }, [data, editInitialized])
 
+  useEffect(() => {
+    if (data && !aepEditInitialized) {
+      setEditAepPipes((data.aepPipes || []).map(p => ({ ...p, _originalDiam: p.diam })))
+      setEditDnPipes((data.dnPipes || []).map(p => ({ ...p, _originalDiam: p.diam })))
+      setEditAepNodes((data.aepNodes || []).map(n => ({ ...n, _originalBlock: n.block })))
+      setAepEditInitialized(true)
+    }
+  }, [data, aepEditInitialized])
+
+  const hasAepData = data && ((data.aepPipes?.length || 0) + (data.dnPipes?.length || 0) + (data.aepNodes?.length || 0)) > 0
+
+  // Reverse EPANET state
+  const [epanetInpContent, setEpanetInpContent] = useState(null)
+  const [epanetFileName, setEpanetFileName] = useState('')
+
+  const handleReverseEpanet = () => {
+    if (!epanetInpContent || !dxfContent) return
+    const epanetData = parseEpanetInp(epanetInpContent)
+    const updatedData = updateCovadisFromEpanet(data, epanetData, 2.0)
+
+    // Re-initialize AEP edit arrays with updated data
+    setEditAepPipes((updatedData.aepPipes || []).map(p => ({ ...p, _originalDiam: p.diam })))
+    setEditDnPipes((updatedData.dnPipes || []).map(p => ({ ...p, _originalDiam: p.diam })))
+    setEditAepNodes((updatedData.aepNodes || []).map(n => ({ ...n, _originalBlock: n.block })))
+
+    // Build change maps from data diff
+    const layerChanges = {}
+    for (let i = 0; i < updatedData.aepPipes.length; i++) {
+      const o = data.aepPipes?.[i]
+      const u = updatedData.aepPipes[i]
+      if (o && u && o.layer && u.layer && o.layer !== u.layer) {
+        layerChanges[o.layer] = u.layer
+      }
+    }
+    for (let i = 0; i < updatedData.dnPipes.length; i++) {
+      const o = data.dnPipes?.[i]
+      const u = updatedData.dnPipes[i]
+      if (o && u && o.layer && u.layer && o.layer !== u.layer) {
+        layerChanges[o.layer] = u.layer
+      }
+    }
+    const blockChanges = {}
+    for (let i = 0; i < updatedData.aepNodes.length; i++) {
+      const o = data.aepNodes?.[i]
+      const u = updatedData.aepNodes[i]
+      if (o && u && o.block && u.block && o.block !== u.block) {
+        blockChanges[o.block] = u.block
+      }
+    }
+
+    // Apply replacements directly to the original DXF text
+    // DXF group codes use leading spaces (fixed-width, right-aligned to 3 chars)
+    let modified = dxfContent
+    const reNorm = /\r\n/g
+    const hasCRLF = reNorm.test(modified)
+    if (hasCRLF) modified = modified.replace(reNorm, '\n')
+
+    // Helper: replace layer/block name when it follows a group code line
+    // Group codes can be padded (e.g. "  8", " 2", "100")
+    function replaceAfterGc(text, gc, oldVal, newVal) {
+      // Match: newline, optional spaces, group code, optional spaces, newline, oldVal, newline
+      const re = new RegExp(`\\n\\s*${gc}\\s*\\n${escapeRegex(oldVal)}\\n`, 'g')
+      const replacement = `\n${String(gc).padStart(3)}\n${newVal}\n`
+      return text.replace(re, replacement)
+    }
+    function escapeRegex(s) {
+      return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    }
+
+    for (const [oldLayer, newLayer] of Object.entries(layerChanges)) {
+      modified = replaceAfterGc(modified, 8, oldLayer, newLayer)
+      modified = replaceAfterGc(modified, 2, oldLayer, newLayer)
+    }
+    for (const [oldBlock, newBlock] of Object.entries(blockChanges)) {
+      modified = replaceAfterGc(modified, 2, oldBlock, newBlock)
+    }
+
+    if (hasCRLF) modified = modified.replace(/\n/g, '\r\n')
+
+    // Download
+    const outName = fileName ? fileName.replace(/\.dxf$/i, '_updated.dxf') : 'updated.dxf'
+    const blob = new Blob([modified], { type: 'application/dxf' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = outName; a.click()
+    URL.revokeObjectURL(url)
+
+    const changes = Object.keys(layerChanges).length + Object.keys(blockChanges).length
+    alert(`Réversion terminée: ${changes} changements appliqués directement sur "${fileName}"\nFichier téléchargé: ${outName}`)
+  }
+
   const handleSaveDxf = useCallback(() => {
+    if (aepEditMode) {
+      // Save AEP data
+      const dxf = toDxfString({
+        aepPipes: editAepPipes,
+        aepNodes: editAepNodes,
+        aepSplines: data?.aepSplines || [],
+        dnPipes: editDnPipes,
+        assaiLines: data?.assaiLines || [],
+        assaiNodes: data?.assaiNodes || [],
+        incendiePipes: data?.incendiePipes || [],
+        incendieNodes: data?.incendieNodes || [],
+        reseauProjete: data?.reseauProjete || [],
+      })
+      const blob = new Blob([dxf], { type: 'application/dxf' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = 'edited_aep.dxf'; a.click()
+      URL.revokeObjectURL(url)
+      return
+    }
     const finalManholes = editManholes.map(m =>
       m._isNew ? { ...m, x: toDxfCoord(m.lat, m.lng, crsCode).x, y: toDxfCoord(m.lat, m.lng, crsCode).y } : m
     )
@@ -398,11 +584,31 @@ export default function MapView({ data }) {
     const a = document.createElement('a')
     a.href = url; a.download = 'edited_network.dxf'; a.click()
     URL.revokeObjectURL(url)
-  }, [editManholes, editPipes, crsCode])
+  }, [aepEditMode, editManholes, editPipes, editAepPipes, editAepNodes, editDnPipes, data, crsCode])
+
+  const handleExportEpanet = useCallback(() => {
+    const aepData = {
+      aepPipes: editAepPipes,
+      aepNodes: editAepNodes,
+      aepSplines: data?.aepSplines || [],
+      dnPipes: editDnPipes,
+    }
+    const inp = toEpanetInp(aepData)
+    const blob = new Blob([inp], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = 'converted_aep_network.inp'; a.click()
+    URL.revokeObjectURL(url)
+  }, [editAepPipes, editAepNodes, editDnPipes, data])
 
   const toggleEdit = () => {
     if (editMode) { setEditMode(false); setEditTool(null); setDialogData(null); setPipeStart(null) }
-    else { setEditMode(true); setEditTool('manhole'); setPipeStart(null) }
+    else { setEditMode(true); setEditTool('manhole'); setPipeStart(null); setAepEditMode(false) }
+  }
+
+  const toggleAepEdit = () => {
+    if (aepEditMode) { setAepEditMode(false); setAepDialogData(null) }
+    else { setAepEditMode(true); setEditMode(false); setEditTool(null) }
   }
 
   const tools = [
@@ -429,6 +635,53 @@ export default function MapView({ data }) {
   const incendiePipeFC = useMemo(() => geoJSON ? { ...geoJSON, features: geoJSON.features.filter(f => f.properties.type === 'incendie_pipe') } : null, [geoJSON])
   const incendieNodeFC = useMemo(() => geoJSON ? { ...geoJSON, features: geoJSON.features.filter(f => f.properties.type === 'incendie_noeud') } : null, [geoJSON])
 
+  // Civil 3D
+  const c3dPipeFC = useMemo(() => geoJSON ? { ...geoJSON, features: geoJSON.features.filter(f => f.properties.type === 'civil3d_pipe') } : null, [geoJSON])
+  const c3dStructFC = useMemo(() => geoJSON ? { ...geoJSON, features: geoJSON.features.filter(f => f.properties.type === 'civil3d_structure') } : null, [geoJSON])
+
+  // AEP edit interaction component
+  function AepEditInteraction({ aepMode, setAepDialogData, crsCode }) {
+    const map = useMap()
+    useMapEvents({
+      click(e) {
+        if (!aepMode) return
+        // Find nearest AEP pipe vertex within 20px
+        const pt = map.latLngToContainerPoint(e.latlng)
+        let best = -1, bestDist = 20, bestType = '', bestIdx = -1
+        const allPipes = [...editAepPipes, ...editDnPipes]
+        const types = allPipes.map((p, i) =>
+          i < editAepPipes.length ? 'aep' : 'dn'
+        )
+        for (let i = 0; i < allPipes.length; i++) {
+          const p = allPipes[i]
+          const verts = p.vertices || []
+          for (const v of verts) {
+            const ll = toLatLng(v.x, v.y, crsCode)
+            const mp = map.latLngToContainerPoint(L.latLng(ll.lat, ll.lng))
+            const d = pt.distanceTo(mp)
+            if (d < bestDist) { bestDist = d; best = i; bestType = types[i] }
+          }
+        }
+        if (best >= 0) {
+          setAepDialogData({ type: bestType, index: best, ...allPipes[best] })
+        } else {
+          // Try AEP nodes
+          for (let i = 0; i < editAepNodes.length; i++) {
+            const n = editAepNodes[i]
+            const ll = toLatLng(n.x, n.y, crsCode)
+            const mp = map.latLngToContainerPoint(L.latLng(ll.lat, ll.lng))
+            const d = pt.distanceTo(mp)
+            if (d < 20) {
+              setAepDialogData({ type: 'aep_node', index: i, ...n })
+              return
+            }
+          }
+        }
+      },
+    })
+    return null
+  }
+
   return (
     <div className="map-wrapper">
       <div className="map-toolbar">
@@ -441,15 +694,23 @@ export default function MapView({ data }) {
         <span className="map-counts">
           {data && (
             <>
-              <span className="badge pipe">{data.planPipes.filter(p => p.diam > 0).length}/{data.planPipes.length} conduites</span>
-              <span className="badge manhole">{data.manholes.filter(m => m.profileId || m.id !== 'R?').length} regards</span>
+              {(data.planPipes || data.pipes) && (
+                <span className="badge pipe">
+                  {data.planPipes ? `${data.planPipes.filter(p => p.diam > 0).length}/${data.planPipes.length} conduites` : `${data.pipes.filter(p => (p.vertices?.length||0) >= 2).length} conduites (Civil3D)`}
+                </span>
+              )}
+              {data.manholes?.length > 0 && <span className="badge manhole">{data.manholes.filter(m => m.profileId || m.id !== 'R?').length} regards</span>}
+              {data.structures?.length > 0 && <span className="badge" style={{background:'#7b1fa2'}}>{data.structures.length} ouvrages (Civil3D)</span>}
+              {data.labels?.length > 0 && <span className="badge" style={{background:'#e65100'}}>{data.labels.length} étiquettes (Civil3D)</span>}
+              {data.blocks?.length > 0 && <span className="badge" style={{background:'#9c27b0'}}>{data.blocks.length} blocs (Civil3D)</span>}
               {data.profileNodes?.length > 0 && <span className="badge" style={{background:'#d62728'}}>{data.profileNodes.length} nœuds profilés</span>}
               {data.profileSegments?.length > 0 && <span className="badge" style={{background:'#2c7bb6'}}>{data.profileSegments.length} tronçons</span>}
               {data.newEu1Inserts?.length > 0 && <span className="badge" style={{background:'#2ca02c'}}>{data.newEu1Inserts.length} nœuds New EU1</span>}
-              <span className="badge assai-node">{data.assaiNodes.length} nœuds assai</span>
-              <span className="badge aep-pipe">{data.aepPipes?.length || 0} tuyaux AEP</span>
-              <span className="badge aep-node">{data.aepNodes?.length || 0} nœuds AEP</span>
-              <span className="badge incendie">{data.incendieNodes?.length || 0} incendie</span>
+              {data.assaiNodes?.length > 0 && <span className="badge assai-node">{data.assaiNodes.length} nœuds assai</span>}
+              {data.aepPipes?.length > 0 && <span className="badge aep-pipe">{data.aepPipes.length} tuyaux AEP</span>}
+              {data.aepNodes?.length > 0 && <span className="badge aep-node">{data.aepNodes.length} nœuds AEP</span>}
+              {data.dnPipes?.length > 0 && <span className="badge" style={{background:'#9467bd'}}>{data.dnPipes.length} conduites DN</span>}
+              {data.incendieNodes?.length > 0 && <span className="badge incendie">{data.incendieNodes.length} incendie</span>}
               {data.profiles?.length > 0 && <span className="badge" style={{background:'#27ae60'}}>{data.profiles.length} profils</span>}
             </>
           )}
@@ -458,6 +719,10 @@ export default function MapView({ data }) {
           marginLeft: 8, background: editMode ? '#dc3545' : '#28a745', color: '#fff',
           border: 'none', padding: '4px 12px', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold',
         }}>{editMode ? '✕ Exit Edit' : '✎ Edit'}</button>
+        {!isCivil3d(data) && hasAepData && <button onClick={toggleAepEdit} style={{
+          marginLeft: 4, background: aepEditMode ? '#dc3545' : '#1f78b4', color: '#fff',
+          border: 'none', padding: '4px 12px', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold',
+        }}>{aepEditMode ? '✕ Exit AEP' : '✎ AEP'}</button>}
       </div>
       {editMode && (
         <div style={{ display: 'flex', gap: 2, padding: '4px 8px', background: '#fff3cd', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -472,6 +737,48 @@ export default function MapView({ data }) {
             marginLeft: 'auto', background: '#004085', color: '#fff', border: 'none',
             padding: '2px 12px', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem',
           }}>💾 Save DXF</button>
+        </div>
+      )}
+      {aepEditMode && (
+        <div style={{ display: 'flex', gap: 2, padding: '4px 8px', background: '#e3f2fd', flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.82rem', fontWeight: 'bold', color: '#0d47a1' }}>✎ AEP Edit Mode</span>
+          <span style={{ fontSize: '0.78rem', color: '#1565c0', marginLeft: 8 }}>
+            {editAepPipes.length} tuyaux · {editDnPipes.length} DN · {editAepNodes.length} nœuds
+          </span>
+          <span style={{ fontSize: '0.75rem', color: '#546e7a', marginLeft: 8 }}>
+            Cliquez sur un tuyau/nœud pour changer son diamètre
+          </span>
+          <button onClick={handleSaveDxf} style={{
+            background: '#004085', color: '#fff', border: 'none',
+            padding: '2px 12px', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem',
+          }}>💾 Save DXF</button>
+          <button onClick={handleExportEpanet} style={{
+            marginLeft: 4, background: '#2e7d32', color: '#fff', border: 'none',
+            padding: '2px 12px', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem',
+          }}>🔧 EPANET</button>
+          <span style={{ margin: '0 4px', width: 1, height: 20, background: '#90caf9' }} />
+          <label style={{
+            background: '#6a1b9a', color: '#fff', border: 'none',
+            padding: '2px 10px', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold', fontSize: '0.78rem', whiteSpace: 'nowrap',
+          }}>
+            {epanetFileName || '📄 Charger INP'}
+            <input type="file" accept=".inp" style={{ display: 'none' }}
+              onChange={e => {
+                const f = e.target.files?.[0]
+                if (!f) return
+                const reader = new FileReader()
+                reader.onload = ev => {
+                  setEpanetInpContent(ev.target.result)
+                  setEpanetFileName(f.name)
+                }
+                reader.readAsText(f)
+              }}
+            />
+          </label>
+          {epanetInpContent && <button onClick={handleReverseEpanet} style={{
+            background: '#e65100', color: '#fff', border: 'none',
+            padding: '2px 12px', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold', fontSize: '0.82rem',
+          }}>🔄 Reverse</button>}
         </div>
       )}
       <MapContainer center={[36.5, 3.0]} zoom={6} style={{ height: '100%', width: '100%' }}>
@@ -493,6 +800,8 @@ export default function MapView({ data }) {
         {aepSplineFC && <GeoJSON key={crsCode + 'as'} data={aepSplineFC} style={pipeStyle} onEachFeature={onEachFeature} />}
         {incendiePipeFC && <GeoJSON key={crsCode + 'ip'} data={incendiePipeFC} style={pipeStyle} onEachFeature={onEachFeature} />}
         {incendieNodeFC && <GeoJSON key={crsCode + 'in'} data={incendieNodeFC} pointToLayer={pointToLayer} onEachFeature={onEachFeature} />}
+        {c3dPipeFC && <GeoJSON key={crsCode + 'c3p'} data={c3dPipeFC} style={pipeStyle} onEachFeature={onEachFeature} />}
+        {c3dStructFC && <GeoJSON key={crsCode + 'c3s'} data={c3dStructFC} pointToLayer={pointToLayer} onEachFeature={onEachFeature} />}
         {geoJSON && <FitBounds geoJSON={geoJSON} />}
         {editMode && (
           <EditInteraction
@@ -505,7 +814,119 @@ export default function MapView({ data }) {
             crsCode={crsCode}
           />
         )}
+        {aepEditMode && (
+          <AepEditInteraction
+            aepMode={aepEditMode}
+            setAepDialogData={setAepDialogData}
+            crsCode={crsCode}
+          />
+        )}
       </MapContainer>
+
+      {/* AEP property dialog */}
+      {aepDialogData && (aepDialogData.type === 'aep' || aepDialogData.type === 'dn') && (
+        <div className="edit-dialog-overlay" style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000,
+        }}>
+          <div className="edit-dialog" style={{
+            background: '#fff', borderRadius: 8, padding: 20,
+            minWidth: 320, maxWidth: 400, boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+          }}>
+            <h3 style={{ margin: '0 0 12px' }}>
+              {aepDialogData.type === 'aep' ? 'Tuyau AEP' : 'Conduite DN'} #{aepDialogData.index + 1}
+            </h3>
+            <label style={{display:'block',marginBottom:6}}>
+              Diamètre (mm):
+              <select value={aepDialogData.diam || ''} onChange={e => {
+                const v = e.target.value
+                const newLayer = aepDialogData.type === 'aep' ? `DN${v}` : `DN ${v}`
+                setAepDialogData(d => ({...d, diam: v, layer: newLayer}))
+                if (aepDialogData.type === 'aep') {
+                  setEditAepPipes(prev => prev.map((p,i) => i === aepDialogData.index ? {...p, diam: v, layer: newLayer} : p))
+                } else {
+                  setEditDnPipes(prev => prev.map((p,i) => i === aepDialogData.index ? {...p, diam: v, layer: newLayer} : p))
+                }
+              }} style={{width:'100%',padding:4,border:'1px solid #ccc',borderRadius:3,fontSize:'1rem'}}>
+                {[25, 40, 50, 63, 75, 90, 100, 110, 125, 140, 160, 180, 200, 225, 250, 300, 315, 350, 400, 450, 500, 600, 800, 1000].map(d =>
+                  <option key={d} value={String(d)}>{`DN${d} mm`}</option>
+                )}
+              </select>
+            </label>
+            <label style={{display:'block',marginBottom:6}}>
+              Calque:
+              <input value={aepDialogData.layer || ''} readOnly
+                style={{width:'100%',padding:4,border:'1px solid #ccc',borderRadius:3,background:'#f5f5f5'}} />
+            </label>
+            {aepDialogData.type === 'aep' && (
+              <label style={{display:'block',marginBottom:6}}>
+                Nb sommets: <span style={{fontWeight:'bold'}}>{(aepDialogData.vertices||[]).length}</span>
+              </label>
+            )}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+              <button onClick={() => setAepDialogData(null)} style={{
+                padding: '6px 16px', background: '#6c757d', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer',
+              }}>Fermer</button>
+              <button onClick={() => {
+                if (aepDialogData.type === 'aep') {
+                  setEditAepPipes(prev => prev.filter((_, i) => i !== aepDialogData.index))
+                } else {
+                  setEditDnPipes(prev => prev.filter((_, i) => i !== aepDialogData.index))
+                }
+                setAepDialogData(null)
+              }} style={{
+                padding: '6px 16px', background: '#dc3545', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer',
+              }}>Supprimer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AEP node dialog */}
+      {aepDialogData && aepDialogData.type === 'aep_node' && (
+        <div className="edit-dialog-overlay" style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000,
+        }}>
+          <div className="edit-dialog" style={{
+            background: '#fff', borderRadius: 8, padding: 20,
+            minWidth: 320, maxWidth: 400, boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+          }}>
+            <h3 style={{ margin: '0 0 12px' }}>Nœud AEP #{aepDialogData.index + 1}</h3>
+            <label style={{display:'block',marginBottom:6}}>
+              Bloc:
+              <select value={aepDialogData.block || ''} onChange={e => {
+                const v = e.target.value
+                setAepDialogData(d => ({...d, block: v}))
+                setEditAepNodes(prev => prev.map((n,i) => i === aepDialogData.index ? {...n, block: v} : n))
+              }} style={{width:'100%',padding:4,border:'1px solid #ccc',borderRadius:3,fontSize:'1rem'}}>
+                {['VanneDN40', 'VanneDN63', 'VanneDN90', 'VanneDN110',
+                  'Té03Brides_DN63', 'Té03Brides_DN90', 'Té03Brides_DN110', 'Té03Brides_DN125',
+                  'Cone_DN110-63', 'Cone_DN110-90', 'Cone_DN125-110', 'Cone_DN200-110',
+                  'Bouchon_DN40', 'Bouchon_DN63', 'Bouchon_DN90', 'Bouchon_DN110',
+                  'Coude90°_DN40', 'Coude90°_DN63', 'Coude90°_DN90', 'Coude90°_DN110',
+                  'PI', 'VD', 'NOEUD'].map(b =>
+                  <option key={b} value={b}>{b}</option>
+                )}
+              </select>
+            </label>
+            <label style={{display:'block',marginBottom:6}}>
+              Position: ({aepDialogData.x?.toFixed(2)}, {aepDialogData.y?.toFixed(2)})
+            </label>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+              <button onClick={() => setAepDialogData(null)} style={{
+                padding: '6px 16px', background: '#6c757d', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer',
+              }}>Fermer</button>
+              <button onClick={() => {
+                setEditAepNodes(prev => prev.filter((_, i) => i !== aepDialogData.index))
+                setAepDialogData(null)
+              }} style={{
+                padding: '6px 16px', background: '#dc3545', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer',
+              }}>Supprimer</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Manhole property dialog */}
       {dialogData && dialogData.type === 'manhole' && (

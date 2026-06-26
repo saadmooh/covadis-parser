@@ -16,7 +16,7 @@ export default function DxfUploader({ onData }) {
       try {
         const text = await file.text()
         const data = JSON.parse(text)
-        onData(data, file.name)
+        onData(data, file.name, 'json')
       } catch (err) {
         console.error(err)
         alert('Erreur lors du chargement du JSON: ' + err.message)
@@ -43,9 +43,19 @@ export default function DxfUploader({ onData }) {
     try {
       const buf = await file.arrayBuffer()
       const text = new TextDecoder('iso-8859-1').decode(buf)
-      const { parseCovadisDxf } = await import('../utils/dxfParser')
-      const data = parseCovadisDxf(text)
-      onData(data, file.name)
+
+      // Detect DXF format: look for Civil 3D sewer layer names
+      const isCivil3d = /C-STRM-(PIPE|STRC|TEXT)|C-SSWR-(PIPE|STRC|TEXT)/.test(text)
+
+      if (isCivil3d) {
+        const { parseCivil3dDxf } = await import('../utils/dxfParserCivil3d')
+        const data = parseCivil3dDxf(text)
+        onData(data, file.name, 'civil3d', text)
+      } else {
+        const { parseCovadisDxf } = await import('../utils/dxfParser')
+        const data = parseCovadisDxf(text)
+        onData(data, file.name, 'covadis', text)
+      }
     } catch (err) {
       console.error(err)
       alert('Erreur lors de l\'analyse du fichier: ' + err.message)

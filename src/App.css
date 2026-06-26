@@ -273,6 +273,14 @@ body {
   font-weight: 600;
   font-size: 0.8rem;
 }
+.badge-storm {
+  background: #2196F3 !important;
+  color: #fff !important;
+}
+.badge-sanitary {
+  background: #4CAF50 !important;
+  color: #fff !important;
+}
 
 /* Profile sections */
 .profile-container {

@@ -169,8 +169,8 @@ export function parseCovadisDxf(dxfContent) {
   const reseauProjete = entities
     .filter(e => e.layer?.includes('assainissement') && e.type === 'LWPOLYLINE')
 
-  // --- 9. AEP (water supply network) ---
-  const aepPipeLayers = ['DN 90', 'DN110', 'DN160', 'DN200', 'DN500', 'MA-P14-pipe 63', 'DN 90', 'DN 63']
+// --- 9. AEP (water supply network) ---
+   const aepPipeLayers = ['DN 90', 'DN110', 'DN160', 'DN200', 'DN400', 'DN500', 'MA-P14-pipe 63', 'DN 90', 'DN 63']
   const aepPipes = entities
     .filter(e => aepPipeLayers.includes(e.layer) && e.type === 'LWPOLYLINE' && e.vertices?.length >= 2)
     .filter(e => {
