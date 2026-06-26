@@ -1,15 +1,38 @@
 import { useState } from 'react'
 import { downloadShapefile, downloadGeoJSON } from '../utils/geoExport'
+import { toEpanetInp } from '../utils/epanetWriter'
 
-export default function DataTable({ data, geoJSON }) {
+function isCivil3d(data) {
+  return data && (data.pipes?.length > 0 || data.structures?.length > 0) && !data.planPipes
+}
+
+const DIAM_OPTIONS = [25, 40, 50, 63, 75, 90, 100, 110, 125, 140, 160, 180, 200, 225, 250, 300, 315, 350, 400, 450, 500, 600, 800, 1000]
+
+export default function DataTable({ data, geoJSON, format, onEditAepPipe, onEditDnPipe, onBulkEditAepPipes, onBulkEditDnPipes }) {
   const [tab, setTab] = useState('pipes')
+
+  const handleExportEpanet = () => {
+    const inp = toEpanetInp(data)
+    const blob = new Blob([inp], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = 'converted_aep_network.inp'; a.click()
+    URL.revokeObjectURL(url)
+  }
 
   if (!data) return null
 
-  const pipeCount = data.pipes.length
+  const isC3d = format === 'civil3d' || isCivil3d(data)
+
+  const c3dPipes = (data.pipes || []).filter(p => p.vertices?.length >= 2)
+  const c3dStructures = data.structures || []
+  const c3dLabels = data.labels || []
+  const c3dBlocks = data.blocks || []
+
+  const pipeCount = data.pipes?.length || 0
   const segCount = data.profileSegments?.length || 0
   const dnCount = data.dnPipes?.length || 0
-  const manholeCount = data.manholes.length
+  const manholeCount = data.manholes?.length || 0
   const newEu1Count = data.newEu1Inserts?.length || 0
   const assaiNodeCount = data.assaiNodes?.length || 0
   const assaiLineCount = data.assaiLines?.length || 0
@@ -24,6 +47,20 @@ export default function DataTable({ data, geoJSON }) {
     <div className="data-panel">
       <div className="data-header">
         <div className="data-tabs">
+          {isC3d ? (<>
+            <button className={tab === 'pipes' ? 'active' : ''} onClick={() => setTab('pipes')}>
+              Conduites ({c3dPipes.length})
+            </button>
+            <button className={tab === 'structures' ? 'active' : ''} onClick={() => setTab('structures')}>
+              Ouvrages ({c3dStructures.length})
+            </button>
+            <button className={tab === 'labels' ? 'active' : ''} onClick={() => setTab('labels')}>
+              Étiquettes ({c3dLabels.length})
+            </button>
+            <button className={tab === 'blocks' ? 'active' : ''} onClick={() => setTab('blocks')}>
+              Blocs ({c3dBlocks.length})
+            </button>
+          </>) : (<>
           <button className={tab === 'pipes' ? 'active' : ''} onClick={() => setTab('pipes')}>
             Conduites EU ({pipeCount})
           </button>
@@ -63,6 +100,7 @@ export default function DataTable({ data, geoJSON }) {
           <button className={tab === 'profiles' ? 'active' : ''} onClick={() => setTab('profiles')}>
             Profils ({profileCount})
           </button>
+          </>)}
         </div>
         <div className="data-export">
           <button onClick={() => downloadShapefile(geoJSON)}>
@@ -71,11 +109,16 @@ export default function DataTable({ data, geoJSON }) {
           <button onClick={() => downloadGeoJSON(geoJSON)}>
             Télécharger GeoJSON
           </button>
+          {(data.aepPipes?.length > 0 || data.aepNodes?.length > 0) && (
+            <button onClick={handleExportEpanet} style={{background:'#2e7d32',color:'#fff',border:'none',padding:'4px 12px',borderRadius:4,cursor:'pointer',fontWeight:'bold',marginLeft:4}}>
+              🔧 EPANET
+            </button>
+          )}
         </div>
       </div>
 
       <div className="data-content">
-        {tab === 'pipes' && (
+        {tab === 'pipes' && !isC3d && (
           <table>
             <thead>
               <tr>
@@ -96,6 +139,106 @@ export default function DataTable({ data, geoJSON }) {
                   <td>{p.slope}</td>
                   <td>{p.dir}</td>
                   <td>{p.material}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {tab === 'pipes' && isC3d && (
+          <table>
+            <thead>
+              <tr>
+                <th>N</th>
+                <th>Réseau</th>
+                <th>Calque</th>
+                <th>Sommets</th>
+                <th>Longueur (m)</th>
+                <th>Handle</th>
+              </tr>
+            </thead>
+            <tbody>
+              {c3dPipes.map((p, i) => (
+                <tr key={i}>
+                  <td>{i + 1}</td>
+                  <td><span className={`diam-badge ${p.network === 'storm' ? 'badge-storm' : 'badge-sanitary'}`}>{p.network}</span></td>
+                  <td>{p.layer}</td>
+                  <td>{p.vertices.length}</td>
+                  <td>{p.length_m.toFixed(2)}</td>
+                  <td style={{fontSize:'0.75rem', color:'#666'}}>{p.handle}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {tab === 'structures' && isC3d && (
+          <table>
+            <thead>
+              <tr>
+                <th>N</th>
+                <th>Réseau</th>
+                <th>Calque</th>
+                <th>X</th>
+                <th>Y</th>
+                <th>Handle</th>
+              </tr>
+            </thead>
+            <tbody>
+              {c3dStructures.map((s, i) => (
+                <tr key={i}>
+                  <td>{i + 1}</td>
+                  <td><span className={`diam-badge ${s.network === 'storm' ? 'badge-storm' : 'badge-sanitary'}`}>{s.network}</span></td>
+                  <td>{s.layer}</td>
+                  <td>{s.x.toFixed(2)}</td>
+                  <td>{s.y.toFixed(2)}</td>
+                  <td style={{fontSize:'0.75rem', color:'#666'}}>{s.handle}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {tab === 'labels' && isC3d && (
+          <table>
+            <thead>
+              <tr>
+                <th>N</th>
+                <th>Texte</th>
+                <th>Calque</th>
+                <th>X</th>
+                <th>Y</th>
+              </tr>
+            </thead>
+            <tbody>
+              {c3dLabels.map((l, i) => (
+                <tr key={i}>
+                  <td>{i + 1}</td>
+                  <td>{l.text}</td>
+                  <td>{l.layer}</td>
+                  <td>{l.x.toFixed(2)}</td>
+                  <td>{l.y.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {tab === 'blocks' && isC3d && (
+          <table>
+            <thead>
+              <tr>
+                <th>N</th>
+                <th>Bloc</th>
+                <th>Calque</th>
+                <th>X</th>
+                <th>Y</th>
+              </tr>
+            </thead>
+            <tbody>
+              {c3dBlocks.map((b, i) => (
+                <tr key={i}>
+                  <td>{i + 1}</td>
+                  <td>{b.block}</td>
+                  <td>{b.layer}</td>
+                  <td>{b.x.toFixed(2)}</td>
+                  <td>{b.y.toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>
@@ -137,37 +280,51 @@ export default function DataTable({ data, geoJSON }) {
         )}
 
         {tab === 'dn200' && (
-          <table>
-            <thead>
-              <tr>
-                <th>N</th>
-                <th>Calque</th>
-                <th>DN (mm)</th>
-                <th>Sommets</th>
-                <th>X min</th>
-                <th>Y min</th>
-                <th>X max</th>
-                <th>Y max</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.dnPipes?.map((d, i) => {
-                const xs = d.vertices.map(v => v.x), ys = d.vertices.map(v => v.y)
-                return (
-                  <tr key={i}>
-                    <td>{i + 1}</td>
-                    <td>{d.layer}</td>
-                    <td><span className="diam-badge">{d.diam}</span></td>
-                    <td>{d.vertices.length}</td>
-                    <td>{Math.min(...xs).toFixed(2)}</td>
-                    <td>{Math.min(...ys).toFixed(2)}</td>
-                    <td>{Math.max(...xs).toFixed(2)}</td>
-                    <td>{Math.max(...ys).toFixed(2)}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+          <div>
+            <div className="bulk-edit-bar" style={{padding: '8px 0', marginBottom: 8}}>
+              <span style={{fontSize: '0.9rem', color: '#555'}}>Modification groupée DN: </span>
+              {Array.from(new Set(data.dnPipes?.map(p => p.diam))).filter(d => d).sort((a,b) => a-b).map(d => (
+                <select key={d} defaultValue={d} onChange={e => onBulkEditDnPipes?.(d, Number(e.target.value))} style={{marginRight: 4}}>
+                  {DIAM_OPTIONS.map(opt => <option key={opt} value={opt}>DN{opt}</option>)}
+                </select>
+              ))}
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>N</th>
+                  <th>Calque</th>
+                  <th>DN (mm)</th>
+                  <th>Sommets</th>
+                  <th>X min</th>
+                  <th>Y min</th>
+                  <th>X max</th>
+                  <th>Y max</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.dnPipes?.map((d, i) => {
+                  const xs = d.vertices.map(v => v.x), ys = d.vertices.map(v => v.y)
+                  return (
+                    <tr key={i}>
+                      <td>{i + 1}</td>
+                      <td>{d.layer}</td>
+                      <td>
+                        <select value={d.diam} onChange={e => onEditDnPipe?.(i, Number(e.target.value))}>
+                          {DIAM_OPTIONS.map(opt => <option key={opt} value={opt}>DN{opt}</option>)}
+                        </select>
+                      </td>
+                      <td>{d.vertices.length}</td>
+                      <td>{Math.min(...xs).toFixed(2)}</td>
+                      <td>{Math.min(...ys).toFixed(2)}</td>
+                      <td>{Math.max(...xs).toFixed(2)}</td>
+                      <td>{Math.max(...ys).toFixed(2)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
 
         {tab === 'assai-nodes' && (
@@ -255,37 +412,51 @@ export default function DataTable({ data, geoJSON }) {
         )}
 
         {tab === 'aep-pipes' && (
-          <table>
-            <thead>
-              <tr>
-                <th>N</th>
-                <th>Calque</th>
-                <th>DN (mm)</th>
-                <th>Sommets</th>
-                <th>X min</th>
-                <th>Y min</th>
-                <th>X max</th>
-                <th>Y max</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.aepPipes.map((ap, i) => {
-                const xs = ap.vertices.map(v => v.x), ys = ap.vertices.map(v => v.y)
-                return (
-                  <tr key={i}>
-                    <td>{i + 1}</td>
-                    <td>{ap.layer}</td>
-                    <td>{ap.diam}</td>
-                    <td>{ap.vertices.length}</td>
-                    <td>{Math.min(...xs).toFixed(2)}</td>
-                    <td>{Math.min(...ys).toFixed(2)}</td>
-                    <td>{Math.max(...xs).toFixed(2)}</td>
-                    <td>{Math.max(...ys).toFixed(2)}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+          <div>
+            <div className="bulk-edit-bar" style={{padding: '8px 0', marginBottom: 8}}>
+              <span style={{fontSize: '0.9rem', color: '#555'}}>Modification groupée DN: </span>
+              {Array.from(new Set(data.aepPipes.map(p => p.diam))).filter(d => d).sort((a,b) => a-b).map(d => (
+                <select key={d} defaultValue={d} onChange={e => onBulkEditAepPipes?.(d, Number(e.target.value))} style={{marginRight: 4}}>
+                  {DIAM_OPTIONS.map(opt => <option key={opt} value={opt}>DN{opt}</option>)}
+                </select>
+              ))}
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>N</th>
+                  <th>Calque</th>
+                  <th>DN (mm)</th>
+                  <th>Sommets</th>
+                  <th>X min</th>
+                  <th>Y min</th>
+                  <th>X max</th>
+                  <th>Y max</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.aepPipes.map((ap, i) => {
+                  const xs = ap.vertices.map(v => v.x), ys = ap.vertices.map(v => v.y)
+                  return (
+                    <tr key={i}>
+                      <td>{i + 1}</td>
+                      <td>{ap.layer}</td>
+                      <td>
+                        <select value={ap.diam} onChange={e => onEditAepPipe?.(i, Number(e.target.value))}>
+                          {DIAM_OPTIONS.map(d => <option key={d} value={d}>DN{d}</option>)}
+                        </select>
+                      </td>
+                      <td>{ap.vertices.length}</td>
+                      <td>{Math.min(...xs).toFixed(2)}</td>
+                      <td>{Math.min(...ys).toFixed(2)}</td>
+                      <td>{Math.max(...xs).toFixed(2)}</td>
+                      <td>{Math.max(...ys).toFixed(2)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
 
         {tab === 'aep-nodes' && (
