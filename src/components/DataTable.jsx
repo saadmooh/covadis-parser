@@ -517,7 +517,7 @@ export default function DataTable({ data, geoJSON, format, onEditAepPipe, onEdit
             <tbody>
               {data.incendieNodes.map((n, i) => (
                 <tr key={i}>
-                  <td>{i + 1}</td>
+                  <td>{n.id}</td>
                   <td>Nœud</td>
                   <td>{n.x.toFixed(2)}</td>
                   <td>{n.y.toFixed(2)}</td>

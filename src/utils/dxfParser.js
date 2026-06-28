@@ -450,7 +450,7 @@ export function parseCovadisDxf(dxfContent) {
 
   const incendieNodes = entities
     .filter(e => e.layer === '_RESEAU INCENDIE' && e.type === 'INSERT' && (isPlanCoords ? (e.x > 500000 && e.y > 2000000) : true))
-    .map(e => ({ x: e.x, y: e.y, block: e.block, rotation: e.rotation }))
+    .map((e, i) => ({ id: `Incendie${i + 1}`, x: e.x, y: e.y, block: e.block, rotation: e.rotation }))
 
   // Collect all profile segments into a flat array
   const allSegments = []

@@ -171,7 +171,7 @@ function transformFeatures(data, crsCode) {
   }
   for (const n of data.incendieNodes || []) {
     const ll = toLatLng(n.x, n.y, crsCode)
-    features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [ll.lng, ll.lat] }, properties: { type: 'incendie_noeud', block: n.block } })
+    features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [ll.lng, ll.lat] }, properties: { type: 'incendie_noeud', id: n.id, block: n.block } })
   }
   for (const rp of data.reseauProjete) {
     const coords = rp.vertices.map(v => { const ll = toLatLng(v.x, v.y, crsCode); return [ll.lng, ll.lat] })
@@ -269,7 +269,7 @@ const onEachFeature = (feature, layer) => {
   } else if (p.type === 'new_eu1_noeud') {
     layer.bindPopup(`<div class="popup-content"><strong>Nœud New_EU1</strong><br/>Bloc: ${p.block || 'N/D'}<br/>Rotation: ${(p.rotation || 0).toFixed(1)}°</div>`, { maxWidth: 250 })
   } else if (p.type === 'incendie_noeud') {
-    layer.bindPopup(`<div class="popup-content"><strong>Nœud incendie</strong><br/>Bloc: ${p.block}</div>`, { maxWidth: 250 })
+    layer.bindPopup(`<div class="popup-content"><strong>${p.id}</strong><br/>Bloc: ${p.block}</div>`, { maxWidth: 250 })
   } else if (p.type === 'pipe_dn') {
     layer.bindPopup(`<div class="popup-content"><strong>Conduite DN 200</strong><br/>DN: ${p.diam_mm} mm<br/>${p.calque ? `Calque: ${p.calque}` : ''}</div>`, { maxWidth: 250 })
   } else if (p.type === 'pipe') {
@@ -592,6 +592,7 @@ export default function MapView({ data, format, dxfContent, fileName }) {
       aepNodes: editAepNodes,
       aepSplines: data?.aepSplines || [],
       dnPipes: editDnPipes,
+      incendieNodes: data?.incendieNodes || [],
     }
     const inp = toEpanetInp(aepData)
     const blob = new Blob([inp], { type: 'text/plain' })

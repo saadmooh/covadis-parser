@@ -2,6 +2,15 @@ function dist(a, b) {
   return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2)
 }
 
+function distToSegment(px, py, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y
+  const lenSq = dx * dx + dy * dy
+  if (lenSq === 0) return dist({ x: px, y: py }, a)
+  let t = ((px - a.x) * dx + (py - a.y) * dy) / lenSq
+  t = Math.max(0, Math.min(1, t))
+  return dist({ x: px, y: py }, { x: a.x + t * dx, y: a.y + t * dy })
+}
+
 function formatCoord(v) {
   return v.toFixed(3)
 }
@@ -11,7 +20,7 @@ function makeId(prefix, num) {
 }
 
 export function toEpanetInp(data) {
-  const { aepPipes = [], aepNodes = [], aepSplines = [], dnPipes = [] } = data
+  const { aepPipes = [], aepNodes = [], aepSplines = [], dnPipes = [], incendieNodes = [] } = data
 
   // Collect all pipes
   const allPipes = [
@@ -34,12 +43,24 @@ export function toEpanetInp(data) {
     return id
   }
 
-  // Also add AEP nodes as junctions
+  // Also add AEP nodes as junctions (skip VanneDN* which are valves, not standalone nodes)
   for (const node of aepNodes) {
+    const block = node.block || ''
+    if (/VanneDN/i.test(block)) continue
     const key = `${formatCoord(node.x)},${formatCoord(node.y)}`
     if (!vertexMap.has(key)) {
       junctionCounter++
       const id = makeId('J', junctionCounter)
+      vertexMap.set(key, id)
+      junctions.push({ id, x: node.x, y: node.y, elevation: 0, demand: 0, block: node.block })
+    }
+  }
+
+  // Add incendie nodes as junctions (with Incendie prefix, separate numbering)
+  for (const node of incendieNodes) {
+    const id = node.id || `Incendie${incendieNodes.indexOf(node) + 1}`
+    const key = `${formatCoord(node.x)},${formatCoord(node.y)}`
+    if (!vertexMap.has(key)) {
       vertexMap.set(key, id)
       junctions.push({ id, x: node.x, y: node.y, elevation: 0, demand: 0, block: node.block })
     }
@@ -77,25 +98,41 @@ export function toEpanetInp(data) {
     }
   }
 
-  // Build valves from VanneDN* nodes
+  // Build valves from VanneDN* nodes (valve is like a pipe, connects two pipe vertices)
   const valves = []
   for (const node of aepNodes) {
     const block = node.block || ''
     const vm = block.match(/VanneDN(\d+)/i)
-    if (vm) {
-      const diam = parseInt(vm[1])
-      const key = `${formatCoord(node.x)},${formatCoord(node.y)}`
-      const jId = vertexMap.get(key)
-      if (jId) {
-        valves.push({
-          id: makeId('V', valves.length + 1),
-          node: jId,
-          diameter: diam,
-          type: 'FCV',
-          setting: 0,
-          minorLoss: 0,
-        })
+    if (!vm) continue
+    const diam = parseInt(vm[1])
+    const vx = node.x, vy = node.y
+
+    // Find the closest AEP pipe segment for this valve
+    let bestDist = Infinity
+    let bestFromId = null, bestToId = null
+    for (const p of aepPipes) {
+      const verts = p.vertices || []
+      for (let i = 0; i < verts.length - 1; i++) {
+        const d = distToSegment(vx, vy, verts[i], verts[i + 1])
+        if (d < bestDist) {
+          bestDist = d
+          const fromKey = `${formatCoord(verts[i].x)},${formatCoord(verts[i].y)}`
+          const toKey = `${formatCoord(verts[i + 1].x)},${formatCoord(verts[i + 1].y)}`
+          bestFromId = vertexMap.get(fromKey)
+          bestToId = vertexMap.get(toKey)
+        }
       }
+    }
+    if (bestFromId && bestToId) {
+      valves.push({
+        id: makeId('V', valves.length + 1),
+        node1: bestFromId,
+        node2: bestToId,
+        diameter: diam,
+        type: 'FCV',
+        setting: 0,
+        minorLoss: 0,
+      })
     }
   }
 
@@ -147,7 +184,7 @@ export function toEpanetInp(data) {
     inp.push(';ID\tNode1\tNode2\tDiameter\tType\tSetting\tMinorLoss')
     for (const v of valves) {
       inp.push(fmtLine([
-        v.id, v.node, v.node,
+        v.id, v.node1, v.node2,
         v.diameter.toFixed(1),
         v.type,
         v.setting.toFixed(1),
