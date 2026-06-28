@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { downloadShapefile, downloadGeoJSON } from '../utils/geoExport'
 import { toEpanetInp } from '../utils/epanetWriter'
+import { toSwmmInp } from '../utils/swmmWriter'
 
 function isCivil3d(data) {
   return data && (data.pipes?.length > 0 || data.structures?.length > 0) && !data.planPipes
@@ -17,6 +18,15 @@ export default function DataTable({ data, geoJSON, format, onEditAepPipe, onEdit
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url; a.download = 'converted_aep_network.inp'; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleExportSwmm = () => {
+    const inp = toSwmmInp(data)
+    const blob = new Blob([inp], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = 'sewer_network.inp'; a.click()
     URL.revokeObjectURL(url)
   }
 
@@ -112,6 +122,11 @@ export default function DataTable({ data, geoJSON, format, onEditAepPipe, onEdit
           {(data.aepPipes?.length > 0 || data.aepNodes?.length > 0) && (
             <button onClick={handleExportEpanet} style={{background:'#2e7d32',color:'#fff',border:'none',padding:'4px 12px',borderRadius:4,cursor:'pointer',fontWeight:'bold',marginLeft:4}}>
               🔧 EPANET
+            </button>
+          )}
+          {(data.manholes?.length > 0 || data.profileSegments?.length > 0) && (
+            <button onClick={handleExportSwmm} style={{background:'#1976d2',color:'#fff',border:'none',padding:'4px 12px',borderRadius:4,cursor:'pointer',fontWeight:'bold',marginLeft:4}}>
+              🌊 SWMM
             </button>
           )}
         </div>
