@@ -25,8 +25,23 @@ export default function DxfUploader({ onData }) {
       return
     }
 
+    if (name.endsWith('.csv')) {
+      setLoading(true)
+      try {
+        const text = await file.text()
+        const { parseCsvToData } = await import('../utils/csvParser')
+        const data = parseCsvToData(text)
+        onData(data, file.name, 'csv')
+      } catch (err) {
+        console.error(err)
+        alert('Erreur lors du chargement du CSV: ' + err.message)
+      }
+      setLoading(false)
+      return
+    }
+
     if (!name.endsWith('.dxf')) {
-      alert('Veuillez sélectionner un fichier DXF ou JSON')
+      alert('Veuillez sélectionner un fichier DXF, JSON ou CSV')
       return
     }
 
@@ -80,7 +95,7 @@ export default function DxfUploader({ onData }) {
       <input
         ref={inputRef}
         type="file"
-        accept=".dxf,.json"
+        accept=".dxf,.json,.csv"
         style={{ display: 'none' }}
         onChange={(e) => {
           const file = e.target.files?.[0]
@@ -104,11 +119,11 @@ export default function DxfUploader({ onData }) {
           <p className="upload-text">
             {fileName
               ? `Fichier: ${fileName}`
-              : 'Glissez-déposez un fichier DXF ou JSON ici'}
+              : 'Glissez-déposez un fichier DXF, JSON ou CSV ici'}
           </p>
           <p className="upload-sub">ou</p>
           <button className="upload-btn" onClick={() => inputRef.current?.click()}>
-            Choisir un fichier DXF / JSON
+            Choisir un fichier DXF / JSON / CSV
           </button>
           <p className="upload-sub" style={{marginTop: 8, fontSize: '0.75rem'}}>
             Les fichiers volumineux (&gt;50 Mo) peuvent être pré-traités avec <code>extract_sewer_data.mjs</code>
