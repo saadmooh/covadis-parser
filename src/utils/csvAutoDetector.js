@@ -1,6 +1,7 @@
 import { EPANET_SCHEMA, getRequiredFields, getAllFields } from './schemaDictionary.js'
 import { normalizeHeader, normalizeValue, getColumnStats } from './csvNormalizer.js'
 import { matchColumnToFields } from './fuzzyMatcher.js'
+import { FIELD_VALIDATION_RULES, isDisguisedNull } from './fieldValidator.js'
 
 const DETECTABLE_SECTIONS = ['JUNCTIONS', 'RESERVOIRS', 'TANKS', 'PIPES', 'PUMPS', 'VALVES', 'PATTERNS', 'CURVES']
 
@@ -312,6 +313,33 @@ function detectDelimiter(headerLine) {
   return Object.entries(counts).find(([, v]) => v === max)[0]
 }
 
+function checkDataCompatibility(colValues, field) {
+  const rule = FIELD_VALIDATION_RULES[field]
+  if (!rule) return { compatible: true, penalty: 0 }
+  const nonNull = colValues.filter(v => !isDisguisedNull(v))
+  if (nonNull.length === 0) return { compatible: true, penalty: 0 }
+
+  if (rule.dataType === 'numeric' || rule.dataType === 'integer') {
+    const numericCount = nonNull.filter(v => {
+      const n = Number(String(v).replace(/[, ]/g, ''))
+      return !isNaN(n)
+    }).length
+    const ratio = numericCount / nonNull.length
+    if (ratio < 0.5) return { compatible: false, penalty: 0.8 }
+    if (ratio < 0.8) return { compatible: true, penalty: 0.3 }
+  }
+
+  if (rule.dataType === 'categorical') {
+    const vals = nonNull.map(v => String(v).trim().toUpperCase())
+    const matchCount = vals.filter(v => rule.allowedValues.some(av => av.toUpperCase() === v)).length
+    const ratio = matchCount / nonNull.length
+    if (ratio > 0.5) return { compatible: true, penalty: 0 }
+    return { compatible: true, penalty: 0.2 }
+  }
+
+  return { compatible: true, penalty: 0 }
+}
+
 export function suggestFieldForColumn(header, rows, sectionKey) {
   const schema = EPANET_SCHEMA[sectionKey]
   if (!schema?.synonyms) return { field: null, score: 0 }
@@ -326,7 +354,9 @@ export function suggestFieldForColumn(header, rows, sectionKey) {
     if (match.length > 0 && match[0].score > 0.35) {
       const fpHint = fp.fingerprintHints.find(h => h.field === field)
       const fpBoost = fpHint ? fpHint.strength * 0.3 : 0
-      const combined = match[0].score * 0.6 + fpBoost * 0.4
+      let combined = match[0].score * 0.6 + fpBoost * 0.4
+      const { penalty } = checkDataCompatibility(colValues, field)
+      combined = Math.max(0, combined - penalty)
       if (combined > bestScore) {
         bestScore = combined
         bestField = field

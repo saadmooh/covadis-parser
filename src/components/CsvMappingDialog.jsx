@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { EPANET_SCHEMA, getRequiredFields } from '../utils/schemaDictionary.js'
 import { detectTableType, parseCsvText, isMultiSectionCsv, parseMultiSectionCsv, suggestMappingsForType } from '../utils/csvAutoDetector.js'
+import { validateColumnAssignment } from '../utils/fieldValidator.js'
 
 const STYLE = {
   overlay: {
@@ -235,6 +236,34 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
   const getMatchedField = (header) => {
     if (!currentType) return null
     return mergedMappings[`${currentType}__${header}`] || null
+  }
+
+  const columnValidations = useMemo(() => {
+    if (!parsed || !currentType) return {}
+    const results = {}
+    for (const header of parsed.headers) {
+      const match = mergedMappings[`${currentType}__${header}`]
+      if (!match || match.ignored || !match.field) continue
+      const colValues = parsed.rows.map(r => r[header])
+      results[header] = validateColumnAssignment(colValues, match.field)
+    }
+    return results
+  }, [parsed, currentType, mergedMappings])
+
+  const overallValidation = useMemo(() => {
+    const vals = Object.values(columnValidations)
+    const hasBlocking = vals.some(v => v.severity === 'blocking')
+    return {
+      severity: hasBlocking ? 'blocking' : vals.some(v => v.severity === 'warning') ? 'warning' : 'ok',
+      totalErrors: vals.reduce((sum, v) => sum + v.errors.length, 0),
+      totalWarnings: vals.reduce((sum, v) => sum + v.warnings.length, 0),
+    }
+  }, [columnValidations])
+
+  const severityIcon = (severity) => {
+    if (severity === 'blocking') return '🔴'
+    if (severity === 'warning') return '🟡'
+    return '🟢'
   }
 
   const isSpecialType = (type) => ['CONTROLS', 'LABELS'].includes(type)
@@ -614,6 +643,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
                       <th style={STYLE.th}>عمود CSV</th>
                       <th style={STYLE.th}>الحقل المكتشف</th>
                       <th style={STYLE.th}>الثقة</th>
+                      <th style={STYLE.th}>التحقق</th>
                       <th style={STYLE.th}>التعيين اليدوي</th>
                       <th style={STYLE.th}>إجراءات</th>
                     </tr>
@@ -623,7 +653,10 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
                       const match = getMatchedField(header)
                       const isIgnored = match?.ignored
                       const isRequired = requiredFields.includes(match?.field)
-                      const rowStyle = isIgnored ? { opacity: 0.4 } : isRequired ? { background: '#f0fff4' } : {}
+                      const validation = columnValidations[header]
+                      const hasError = validation?.severity === 'blocking'
+                      const hasWarning = validation?.severity === 'warning'
+                      const rowStyle = isIgnored ? { opacity: 0.4 } : hasError ? { background: '#fff5f5' } : hasWarning ? { background: '#fffbe6' } : isRequired ? { background: '#f0fff4' } : {}
 
                       return (
                         <tr key={header} style={rowStyle}>
@@ -639,6 +672,22 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
                           </td>
                           <td style={STYLE.td}>
                             {match && !isIgnored ? confidenceBadge(match.score) : null}
+                          </td>
+                          <td style={STYLE.td}>
+                            {validation && !isIgnored && (
+                              <div style={{ fontSize: 11 }}>
+                                <span>{severityIcon(validation.severity)}</span>
+                                {validation.errors.length > 0 && (
+                                  <span style={{ color: '#dc3545', marginRight: 4 }}>{validation.errors[0].message}</span>
+                                )}
+                                {validation.warnings.length > 0 && validation.errors.length === 0 && (
+                                  <span style={{ color: '#856404', marginRight: 4 }}>{validation.warnings[0].message}</span>
+                                )}
+                                {validation.infos.length > 0 && validation.errors.length === 0 && validation.warnings.length === 0 && (
+                                  <span style={{ color: '#0c5460', marginRight: 4 }}>{validation.infos[0].message}</span>
+                                )}
+                              </div>
+                            )}
                           </td>
                           <td style={STYLE.td}>
                             <select
@@ -720,10 +769,16 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
             {currentType && !allRequiredMet && !isSpecialType(currentType) && (
               <span style={{ fontSize: 11, color: '#856404' }}>يرجى تعيين جميع الحقول الإلزامية</span>
             )}
+            {overallValidation.severity === 'blocking' && (
+              <span style={{ fontSize: 11, color: '#dc3545' }}>🔴 أخطاء في التحقق ({overallValidation.totalErrors})</span>
+            )}
+            {overallValidation.severity === 'warning' && (
+              <span style={{ fontSize: 11, color: '#856404' }}>🟡 تحذيرات ({overallValidation.totalWarnings})</span>
+            )}
             <button
               onClick={handleConfirm}
-              disabled={!currentType || (!allRequiredMet && !isSpecialType(currentType))}
-              style={{ ...STYLE.btn('primary'), opacity: currentType && (allRequiredMet || isSpecialType(currentType)) ? 1 : 0.5, cursor: currentType ? 'pointer' : 'not-allowed' }}
+              disabled={!currentType || (!allRequiredMet && !isSpecialType(currentType)) || overallValidation.severity === 'blocking'}
+              style={{ ...STYLE.btn('primary'), opacity: currentType && (allRequiredMet || isSpecialType(currentType)) && overallValidation.severity !== 'blocking' ? 1 : 0.5, cursor: currentType ? 'pointer' : 'not-allowed' }}
             >
               تأكيد وتوليد .inp
             </button>
