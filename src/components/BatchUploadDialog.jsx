@@ -160,7 +160,8 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
       </div>
       {showMapping && active && !active.isMultiSection && active.rawContent && (
         <CsvMappingDialog key={active.id} rawCsv={active.rawContent} onConfirm={handleMappingConfirm} onCancel={handleMappingCancel}
-          initialMapping={active.mapping ? { ...active.mapping, _selectedType: active.selectedType } : undefined} onStateChange={handleMappingStateChange} />
+          initialMapping={active.mapping ? { ...active.mapping, _selectedType: active.selectedType } : undefined} onStateChange={handleMappingStateChange}
+          batchMode onNext={handleNext} />
       )}
     </div>
   )

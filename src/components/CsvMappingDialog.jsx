@@ -84,7 +84,7 @@ const SIMPLE_FIELDS = {
   TAGS: ['objectType', 'id', 'tag'],
 }
 
-export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectMode, initialMapping, onStateChange }) {
+export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectMode, initialMapping, onStateChange, batchMode, onNext }) {
   const [fieldMappings, setFieldMappings] = useState(initialMapping || {})
   const [showPreview, setShowPreview] = useState(true)
   const [expandedSection, setExpandedSection] = useState(null)
@@ -788,6 +788,15 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
             >
               تأكيد {projectMode ? 'وإضافة للمشروع' : 'وتوليد .inp'}
             </button>
+            {batchMode && (
+              <button
+                onClick={onNext}
+                disabled={!currentType || (!allRequiredMet && !isSpecialType(currentType)) || overallValidation.severity === 'blocking'}
+                style={{ ...STYLE.btn('info'), opacity: currentType && (allRequiredMet || isSpecialType(currentType)) && overallValidation.severity !== 'blocking' ? 1 : 0.5, cursor: currentType ? 'pointer' : 'not-allowed' }}
+              >
+                التالي →
+              </button>
+            )}
           </div>
         </div>
       </div>
