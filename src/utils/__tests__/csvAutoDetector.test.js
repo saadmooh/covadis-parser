@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseCsvText, detectTableType, isMultiSectionCsv, parseMultiSectionCsv } from '../csvAutoDetector.js'
+import { parseCsvText, detectTableType, isMultiSectionCsv, parseMultiSectionCsv, isJunkColumn, parseLabelsField, detectDiscriminatorColumn } from '../csvAutoDetector.js'
 
 describe('parseCsvText', () => {
   it('parses a standard CSV', () => {
@@ -180,5 +180,95 @@ CURVES,C1,20,200`
     expect(result.patterns.length).toBe(2)
     expect(result.patterns[0].id).toBe('DMA1_pat')
     expect(result.curves.length).toBe(2)
+  })
+})
+
+describe('isJunkColumn', () => {
+  it('detects columns with only semicolons', () => {
+    const rows = [{ ';': ';' }, { ';': ';' }, { ';': ';' }, { ';': ';' }]
+    expect(isJunkColumn(rows, ';')).toBe(true)
+  })
+
+  it('does not flag normal data columns', () => {
+    const rows = [{ id: 'J1' }, { id: 'J2' }, { id: 'J3' }]
+    expect(isJunkColumn(rows, 'id')).toBe(false)
+  })
+
+  it('detects mostly empty columns', () => {
+    const rows = [{ x: '' }, { x: '' }, { x: '' }, { x: 'value' }]
+    expect(isJunkColumn(rows, 'x')).toBe(false)
+  })
+})
+
+describe('parseLabelsField', () => {
+  it('parses standard LABELS format with anchor', () => {
+    const result = parseLabelsField('-245964.09  147727.31  "Source" R1')
+    expect(result).toEqual({ x: -245964.09, y: 147727.31, text: 'Source', anchorId: 'R1' })
+  })
+
+  it('parses LABELS without anchor', () => {
+    const result = parseLabelsField('100 200 "Hello World"')
+    expect(result).toEqual({ x: 100, y: 200, text: 'Hello World', anchorId: null })
+  })
+
+  it('parses LABELS with single quotes', () => {
+    const result = parseLabelsField('100 200 Label')
+    expect(result).toEqual({ x: 100, y: 200, text: 'Label', anchorId: null })
+  })
+
+  it('returns null for unparseable strings', () => {
+    expect(parseLabelsField('not a label')).toBeNull()
+    expect(parseLabelsField('')).toBeNull()
+    expect(parseLabelsField(null)).toBeNull()
+  })
+})
+
+describe('detectDiscriminatorColumn', () => {
+  it('finds Section column with EPANET section names', () => {
+    const headers = ['Section', 'col1', 'col2']
+    const rows = [
+      { Section: 'JUNCTIONS', col1: 'J1', col2: '100' },
+      { Section: 'PIPES', col1: 'P1', col2: 'J1' },
+      { Section: 'JUNCTIONS', col1: 'J2', col2: '200' },
+      { Section: 'PIPES', col1: 'P2', col2: 'J2' },
+    ]
+    const result = detectDiscriminatorColumn(headers, rows)
+    expect(result).not.toBeNull()
+    expect(result.header).toBe('Section')
+  })
+
+  it('returns null for non-discriminator columns', () => {
+    const headers = ['id', 'name', 'value']
+    const rows = [
+      { id: '1', name: 'foo', value: '100' },
+      { id: '2', name: 'bar', value: '200' },
+    ]
+    expect(detectDiscriminatorColumn(headers, rows)).toBeNull()
+  })
+})
+
+describe('multi-section with junk columns', () => {
+  it('identifies junk columns and excludes them', () => {
+    const csv = `Section,col1,col2,col3,col4
+JUNCTIONS,J1,100,1.5,;
+JUNCTIONS,J2,200,0,;
+PIPES,P1,J1,J2,;
+COORDINATES,J1,500000,4500000,;`
+    const result = parseMultiSectionCsv(csv)
+    expect(result.junctions.length).toBe(2)
+    expect(result.pipes.length).toBe(1)
+    expect(result.junkColumns).toContain('col4')
+  })
+})
+
+describe('multi-section with LABELS', () => {
+  it('parses LABELS section', () => {
+    const csv = `Section,col1,col2,col3,col4
+LABELS,100,200,"Source" R1,
+LABELS,300,400,"Tank" T1,`
+    const result = parseMultiSectionCsv(csv)
+    expect(result.labels.length).toBe(2)
+    expect(result.labels[0].text).toBe('Source')
+    expect(result.labels[0].anchorId).toBe('R1')
   })
 })

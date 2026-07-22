@@ -4,7 +4,7 @@ import { matchColumnToFields } from './fuzzyMatcher.js'
 
 const DETECTABLE_SECTIONS = ['JUNCTIONS', 'RESERVOIRS', 'TANKS', 'PIPES', 'PUMPS', 'VALVES', 'PATTERNS', 'CURVES']
 
-const SECTION_FIELD_MAP = {
+const POSITIONAL_SCHEMA = {
   JUNCTIONS: ['id', 'elevation', 'demand', 'pattern'],
   RESERVOIRS: ['id', 'head', 'pattern'],
   TANKS: ['id', 'elevation', 'initLevel', 'minLevel', 'maxLevel', 'diameter', 'minVol', 'volCurve'],
@@ -18,12 +18,34 @@ const SECTION_FIELD_MAP = {
   TIMES: ['key', 'value'],
   STATUS: ['id', 'status'],
   CONTROLS: ['text'],
-  TAGS: ['id', 'tag'],
+  TAGS: ['objectType', 'id', 'tag'],
   LABELS: ['text'],
   ENERGY: ['key', 'value'],
   REACTIONS: ['key', 'value'],
   REPORT: ['key', 'value'],
   BACKDROP: [],
+}
+
+const SECTION_SYNONYMS = {
+  JUNCTIONS: ['junctions', 'junct', 'nodes', 'node', 'junction', 'عقد', 'نود', 'عُقد'],
+  RESERVOIRS: ['reservoirs', 'reservoir', 'sources', 'source', 'خزانات', 'خزان', 'مصدر'],
+  TANKS: ['tanks', 'tank', 'reservoirs_tank', 'خزانات_تخزين'],
+  PIPES: ['pipes', 'pipe', 'links', 'link', 'conduits', 'conduit', 'أنابيب', 'أنبوب', 'روابط'],
+  PUMPS: ['pumps', 'pump', 'طلمبات', 'مضخة'],
+  VALVES: ['valves', 'valve', 'صمامات', 'صمام'],
+  PATTERNS: ['patterns', 'pattern', 'demand_patterns', 'أنماط', 'نمط'],
+  CURVES: ['curves', 'curve', 'pump_curves', 'منحنيات', 'منحنى'],
+  COORDINATES: ['coordinates', 'coordinate', 'coords', 'positions', 'إحداثيات'],
+  STATUS: ['status', 'states', 'حالة'],
+  CONTROLS: ['controls', 'control', 'rules', 'تحكم'],
+  TAGS: ['tags', 'tag', 'labels_tag', 'تصنيفات', 'تصنيف'],
+  LABELS: ['labels', 'label', 'text_labels', 'تسميات', 'تسمية'],
+  OPTIONS: ['options', 'option', 'settings', 'إعدادات'],
+  TIMES: ['times', 'time', 'time_settings', 'أوقات'],
+  ENERGY: ['energy', 'energies', 'طاقة'],
+  REACTIONS: ['reactions', 'reaction', 'تفاعلات'],
+  REPORT: ['report', 'reports', 'تقرير'],
+  BACKDROP: ['backdrop', 'backdrops', 'خلفية'],
 }
 
 export function parseCsvText(text) {
@@ -49,7 +71,18 @@ export function isMultiSectionCsv(text) {
   const delimiter = detectDelimiter(lines[0])
   const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase().replace(/^\uFEFF/, ''))
   const firstHeader = headers[0]
-  if (firstHeader !== 'section' && firstHeader !== 'type' && firstHeader !== 'categorie') return false
+  const SECTION_COL_NAMES = ['section', 'type', 'categorie', 'category', 'element', 'elementtype', 'القسم', 'النوع']
+  if (!SECTION_COL_NAMES.includes(firstHeader)) {
+    for (let i = 1; i < Math.min(lines.length, 20); i++) {
+      const vals = lines[i].split(delimiter)
+      const firstVal = (vals[0] || '').trim().toUpperCase()
+      if (DETECTABLE_SECTIONS.includes(firstVal) || ['COORDINATES', 'OPTIONS', 'TIMES', 'STATUS', 'CONTROLS', 'TAGS', 'LABELS', 'ENERGY', 'REACTIONS', 'REPORT', 'BACKDROP'].includes(firstVal)) {
+        continue
+      }
+      return false
+    }
+    return false
+  }
   const sectionCounts = {}
   const step = Math.max(1, Math.floor(lines.length / 200))
   for (let i = 1; i < lines.length; i += step) {
@@ -60,6 +93,87 @@ export function isMultiSectionCsv(text) {
   const ALL_SECTIONS = [...DETECTABLE_SECTIONS, 'COORDINATES', 'OPTIONS', 'TIMES', 'STATUS', 'CONTROLS', 'TAGS', 'LABELS', 'ENERGY', 'REACTIONS', 'REPORT', 'BACKDROP']
   const knownSections = Object.keys(sectionCounts).filter(s => ALL_SECTIONS.includes(s))
   return knownSections.length >= 2
+}
+
+export function detectDiscriminatorColumn(headers, rows) {
+  for (const header of headers) {
+    const values = rows.map(r => (r[header] || '').trim())
+    const nonEmpty = values.filter(v => v !== '')
+    if (nonEmpty.length === 0) continue
+    const unique = new Set(nonEmpty.map(v => v.toUpperCase()))
+    const ratio = unique.size / nonEmpty.length
+    if (ratio > 0.2 && ratio < 0.6 && unique.size > 1 && unique.size < 30) {
+      const allKnown = [...DETECTABLE_SECTIONS, 'COORDINATES', 'OPTIONS', 'TIMES', 'STATUS', 'CONTROLS', 'TAGS', 'LABELS', 'ENERGY', 'REACTIONS', 'REPORT', 'BACKDROP']
+      const matches = [...unique].filter(v => allKnown.includes(v) || Object.values(SECTION_SYNONYMS).flat().some(syn => syn.toLowerCase() === v.toLowerCase()))
+      if (matches.length >= 2) {
+        return { header, uniqueValues: [...unique], matchRatio: matches.length / unique.size }
+      }
+    }
+  }
+  return null
+}
+
+export function normalizeSectionName(value) {
+  const upper = value.toUpperCase()
+  if (POSITIONAL_SCHEMA[upper]) return upper
+  const lower = value.toLowerCase()
+  for (const [section, syns] of Object.entries(SECTION_SYNONYMS)) {
+    if (syns.some(syn => syn.toLowerCase() === lower)) return section
+  }
+  return null
+}
+
+export function isJunkColumn(rows, header) {
+  if (!rows || rows.length === 0) return false
+  const values = rows.map(r => r[header] || '')
+  const nonEmpty = values.filter(v => v.trim() !== '')
+  const junkValues = nonEmpty.filter(v => /^[;#//]+$/.test(v.trim()) || v.trim() === '')
+  return nonEmpty.length > 0 && (junkValues.length / nonEmpty.length) > 0.95
+}
+
+export function filterJunkColumns(rows, headers) {
+  const junkCols = []
+  const keepCols = []
+  for (const h of headers) {
+    if (h === 'Section' || h === 'Type' || h === 'Categorie' || h === 'Category') {
+      keepCols.push(h)
+      continue
+    }
+    if (isJunkColumn(rows, h)) {
+      junkCols.push(h)
+    } else {
+      keepCols.push(h)
+    }
+  }
+  return { keepCols, junkCols }
+}
+
+export function parseLabelsField(value) {
+  if (!value) return null
+  let cleaned = value.trim()
+  cleaned = cleaned.replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1')
+  cleaned = cleaned.replace(/""/g, '"')
+  const regex = /^(-?[\d.]+)\s+(-?[\d.]+)\s+"([^"]*)"\s*(\S+)?$/
+  const match = cleaned.match(regex)
+  if (match) {
+    return {
+      x: Number(match[1]),
+      y: Number(match[2]),
+      text: match[3],
+      anchorId: match[4] || null,
+    }
+  }
+  const simpleRegex = /^(-?[\d.]+)\s+(-?[\d.]+)\s+(.+)$/
+  const simpleMatch = cleaned.match(simpleRegex)
+  if (simpleMatch) {
+    return {
+      x: Number(simpleMatch[1]),
+      y: Number(simpleMatch[2]),
+      text: simpleMatch[3].replace(/^["']|["']$/g, ''),
+      anchorId: null,
+    }
+  }
+  return null
 }
 
 export function parseMultiSectionCsv(text) {
@@ -80,27 +194,40 @@ export function parseMultiSectionCsv(text) {
     sectionRows[section].push(row)
   }
 
+  const { junkCols } = filterJunkColumns(
+    Object.values(sectionRows).flat(),
+    headers.slice(1)
+  )
+
   const result = {
     junctions: [], reservoirs: [], tanks: [], pipes: [], pumps: [],
     valves: [], patterns: [], curves: [], coordinates: [],
     options: {}, times: {}, status: [], controls: [],
-    tags: [], labels: [], reactions: [], report: [],
+    tags: [], labels: [], reactions: [], report: [], backdrop: [],
+    junkColumns: junkCols,
+    sectionSummary: {},
+    warnings: [],
   }
 
-  const fieldMap = SECTION_FIELD_MAP
-
   for (const [section, rows] of Object.entries(sectionRows)) {
-    const fields = fieldMap[section]
+    const fields = POSITIONAL_SCHEMA[section]
     if (!fields) continue
 
-    if (section === 'OPTIONS' || section === 'TIMES' || section === 'ENERGY' || section === 'REACTIONS' || section === 'REPORT') {
+    const summary = { section, rowCount: rows.length, confidence: 0.98, warnings: [] }
+
+    if (section === 'OPTIONS' || section === 'TIMES' || section === 'ENERGY' || section === 'REACTIONS' || section === 'REPORT' || section === 'BACKDROP') {
       for (const row of rows) {
         const vals = extractColValues(row, headers)
-        if (vals.length >= 2 && vals[0]) {
-          if (section === 'OPTIONS') result.options[vals[0]] = vals[1]
-          else if (section === 'TIMES') result.times[vals[0]] = vals[1]
+        const key = vals[0] || ''
+        const val = vals.slice(1).join('\t').trim()
+        if (key && val) {
+          if (section === 'OPTIONS') result.options[key] = val
+          else if (section === 'TIMES') result.times[key] = val
+          else if (section === 'ENERGY') result.options[key] = val
+          else if (section === 'REACTIONS') result.options[key] = val
         }
       }
+      result.sectionSummary[section] = summary
       continue
     }
 
@@ -110,6 +237,22 @@ export function parseMultiSectionCsv(text) {
         const text = vals.filter(v => v && v !== ';').join(',').trim()
         if (text) result.controls.push(text)
       }
+      result.sectionSummary[section] = summary
+      continue
+    }
+
+    if (section === 'LABELS') {
+      for (const row of rows) {
+        const vals = extractColValues(row, headers)
+        const fullText = vals.join(' ').trim()
+        const parsed = parseLabelsField(fullText)
+        if (parsed) {
+          result.labels.push(parsed)
+        } else {
+          summary.warnings.push(`Failed to parse label: "${fullText.substring(0, 50)}"`)
+        }
+      }
+      result.sectionSummary[section] = summary
       continue
     }
 
@@ -119,6 +262,8 @@ export function parseMultiSectionCsv(text) {
       fields.forEach((f, i) => {
         if (f === 'factors') {
           obj[f] = vals.slice(1).filter(v => v && v !== ';').map(Number).filter(n => !isNaN(n))
+        } else if (f === 'text' && section === 'CONTROLS') {
+          obj[f] = vals.filter(v => v && v !== ';').join(',').trim()
         } else {
           const v = vals[i] || ''
           obj[f] = isNaN(Number(v)) || v === '' ? v : Number(v)
@@ -137,6 +282,17 @@ export function parseMultiSectionCsv(text) {
       else if (section === 'STATUS') result.status.push(obj)
       else if (section === 'TAGS') result.tags.push(obj)
     }
+
+    if (section === 'PATTERNS') {
+      const uniqueIds = new Set(result.patterns.map(p => p.id))
+      summary.groupedCount = uniqueIds.size
+    }
+    if (section === 'CURVES') {
+      const uniqueIds = new Set(result.curves.map(c => c.id))
+      summary.groupedCount = uniqueIds.size
+    }
+
+    result.sectionSummary[section] = summary
   }
 
   return result

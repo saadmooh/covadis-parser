@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react'
 import { EPANET_SCHEMA, getRequiredFields } from '../utils/schemaDictionary.js'
-import { detectTableType, parseCsvText } from '../utils/csvAutoDetector.js'
+import { detectTableType, parseCsvText, isMultiSectionCsv, parseMultiSectionCsv } from '../utils/csvAutoDetector.js'
 
 const STYLE = {
   overlay: {
@@ -42,6 +42,13 @@ const STYLE = {
     background: variant === 'primary' ? '#28a745' : variant === 'danger' ? '#dc3545' : '#6c757d',
     color: '#fff',
   }),
+  sectionRow: (expanded) => ({
+    display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+    borderRadius: 6, cursor: 'pointer', fontSize: 13,
+    background: expanded ? '#e8f4fd' : '#f8f9fa',
+    border: `1px solid ${expanded ? '#b3d7f2' : '#e9ecef'}`,
+    marginBottom: 4, transition: 'all 0.15s',
+  }),
 }
 
 const DETECTABLE_SECTIONS = Object.keys(EPANET_SCHEMA).filter(k =>
@@ -51,16 +58,27 @@ const DETECTABLE_SECTIONS = Object.keys(EPANET_SCHEMA).filter(k =>
 export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
   const [fieldMappings, setFieldMappings] = useState({})
   const [showPreview, setShowPreview] = useState(true)
+  const [expandedSection, setExpandedSection] = useState(null)
 
   const parsed = useMemo(() => {
     if (!rawCsv) return null
     return parseCsvText(rawCsv)
   }, [rawCsv])
 
+  const isMulti = useMemo(() => {
+    if (!rawCsv) return false
+    return isMultiSectionCsv(rawCsv)
+  }, [rawCsv])
+
+  const multiData = useMemo(() => {
+    if (!isMulti || !rawCsv) return null
+    return parseMultiSectionCsv(rawCsv)
+  }, [isMulti, rawCsv])
+
   const detection = useMemo(() => {
-    if (!parsed) return null
+    if (!parsed || isMulti) return null
     return detectTableType(parsed.headers, parsed.rows)
-  }, [parsed])
+  }, [parsed, isMulti])
 
   const detectedType = detection?.detectedType || null
   const confidence = detection?.confidence || 0
@@ -133,21 +151,20 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
   }, [])
 
   const handleConfirm = useCallback(() => {
-    const result = {}
-    for (const [, mapping] of Object.entries(mergedMappings)) {
-      if (mapping.ignored || !mapping.field || !mapping.section) continue
-      if (!result[mapping.section]) result[mapping.section] = {}
-      result[mapping.section][mapping._header || ''] = mapping.field
+    if (isMulti && multiData) {
+      onConfirm({ multiData, isMulti: true })
+      return
     }
+    const result = {}
     for (const [key, mapping] of Object.entries(mergedMappings)) {
       if (mapping.ignored || !mapping.field || !mapping.section) continue
       const header = key.split('__')[1]
-      if (header && result[mapping.section]) {
-        result[mapping.section][header] = mapping.field
-      }
+      if (!header) continue
+      if (!result[mapping.section]) result[mapping.section] = {}
+      result[mapping.section][header] = mapping.field
     }
-    onConfirm({ mapping: result, detectedType: currentType })
-  }, [mergedMappings, currentType, onConfirm])
+    onConfirm({ mapping: result, detectedType: currentType, isMulti: false })
+  }, [mergedMappings, currentType, onConfirm, isMulti, multiData])
 
   const handleTypeChange = useCallback((newType) => {
     setManualType(newType)
@@ -175,6 +192,291 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
   const getMatchedField = (header) => {
     if (!currentType) return null
     return mergedMappings[`${currentType}__${header}`] || null
+  }
+
+  if (isMulti && multiData) {
+    return (
+      <div style={STYLE.overlay} onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}>
+        <div style={STYLE.dialog} onClick={(e) => e.stopPropagation()}>
+          <div style={STYLE.header}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 16 }}>ملف مسطّح موحّد — كشف تلقائي بثقة عالية</h3>
+              <p style={{ margin: '4px 0 0', fontSize: 12, color: '#6c757d' }}>
+                {parsed ? `${parsed.rows.length} صف | عمود العنصر المميِّز: "Section"` : ''}
+              </p>
+            </div>
+          </div>
+
+          <div style={STYLE.body}>
+            {multiData.junctions.length > 0 && (
+              <div style={STYLE.sectionRow(expandedSection === 'JUNCTIONS')} onClick={() => setExpandedSection(expandedSection === 'JUNCTIONS' ? null : 'JUNCTIONS')}>
+                <span>{expandedSection === 'JUNCTIONS' ? '▼' : '▶'}</span>
+                <span style={{ fontWeight: 600 }}>JUNCTIONS</span>
+                <span style={{ color: '#6c757d' }}>({multiData.junctions.length} صف)</span>
+                {confidenceBadge(0.98)}
+                <span style={{ flex: 1 }} />
+                <span style={{ fontSize: 11, color: '#28a745' }}>مكتشف تلقائياً</span>
+              </div>
+            )}
+            {expandedSection === 'JUNCTIONS' && (
+              <div style={{ padding: '8px 12px 12px', background: '#f8fffe', borderRadius: 6, marginBottom: 4, border: '1px solid #d4edda' }}>
+                <div style={{ fontSize: 12, color: '#555', marginBottom: 8 }}>
+                  الحقول: ID, Elevation, Demand, Pattern (حسب الترتيب الموضعي)
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={STYLE.previewTable}>
+                    <thead>
+                      <tr>
+                        <th style={STYLE.previewTh}>ID</th>
+                        <th style={STYLE.previewTh}>Elevation</th>
+                        <th style={STYLE.previewTh}>Demand</th>
+                        <th style={STYLE.previewTh}>Pattern</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {multiData.junctions.slice(0, 5).map((j, i) => (
+                        <tr key={i}>
+                          <td style={STYLE.previewTd}>{j.id}</td>
+                          <td style={STYLE.previewTd}>{j.elevation}</td>
+                          <td style={STYLE.previewTd}>{j.demand}</td>
+                          <td style={STYLE.previewTd}>{j.pattern}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {multiData.pipes.length > 0 && (
+              <div style={STYLE.sectionRow(expandedSection === 'PIPES')} onClick={() => setExpandedSection(expandedSection === 'PIPES' ? null : 'PIPES')}>
+                <span>{expandedSection === 'PIPES' ? '▼' : '▶'}</span>
+                <span style={{ fontWeight: 600 }}>PIPES</span>
+                <span style={{ color: '#6c757d' }}>({multiData.pipes.length} صف)</span>
+                {confidenceBadge(0.96)}
+                <span style={{ flex: 1 }} />
+                <span style={{ fontSize: 11, color: '#28a745' }}>مكتشف تلقائياً</span>
+              </div>
+            )}
+            {expandedSection === 'PIPES' && (
+              <div style={{ padding: '8px 12px 12px', background: '#f8fffe', borderRadius: 6, marginBottom: 4, border: '1px solid #d4edda' }}>
+                <div style={{ fontSize: 12, color: '#555', marginBottom: 8 }}>
+                  الحقول: ID, Node1, Node2, Length, Diameter, Roughness, MinorLoss, Status
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={STYLE.previewTable}>
+                    <thead>
+                      <tr>
+                        <th style={STYLE.previewTh}>ID</th>
+                        <th style={STYLE.previewTh}>Node1</th>
+                        <th style={STYLE.previewTh}>Node2</th>
+                        <th style={STYLE.previewTh}>Length</th>
+                        <th style={STYLE.previewTh}>Diameter</th>
+                        <th style={STYLE.previewTh}>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {multiData.pipes.slice(0, 5).map((p, i) => (
+                        <tr key={i}>
+                          <td style={STYLE.previewTd}>{p.id}</td>
+                          <td style={STYLE.previewTd}>{p.node1}</td>
+                          <td style={STYLE.previewTd}>{p.node2}</td>
+                          <td style={STYLE.previewTd}>{p.length}</td>
+                          <td style={STYLE.previewTd}>{p.diameter}</td>
+                          <td style={STYLE.previewTd}>{p.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {['RESERVOIRS', 'TANKS', 'PUMPS', 'VALVES'].filter(s => multiData[s.toLowerCase() + 's']?.length > 0 || multiData[s.toLowerCase()]?.length > 0).map(section => {
+              const key = section.toLowerCase() + (section === 'RESERVOIRS' ? '' : 's')
+              const items = multiData[key] || []
+              if (items.length === 0) return null
+              return (
+                <div key={section}>
+                  <div style={STYLE.sectionRow(expandedSection === section)} onClick={() => setExpandedSection(expandedSection === section ? null : section)}>
+                    <span>{expandedSection === section ? '▼' : '▶'}</span>
+                    <span style={{ fontWeight: 600 }}>{section}</span>
+                    <span style={{ color: '#6c757d' }}>({items.length} صف)</span>
+                    {confidenceBadge(0.95)}
+                    <span style={{ flex: 1 }} />
+                    <span style={{ fontSize: 11, color: '#28a745' }}>مكتشف تلقائياً</span>
+                  </div>
+                  {expandedSection === section && (
+                    <div style={{ padding: '8px 12px 12px', background: '#f8fffe', borderRadius: 6, marginBottom: 4, border: '1px solid #d4edda' }}>
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={STYLE.previewTable}>
+                          <thead>
+                            <tr>
+                              {Object.keys(items[0] || {}).map(k => (
+                                <th key={k} style={STYLE.previewTh}>{k}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {items.slice(0, 5).map((item, i) => (
+                              <tr key={i}>
+                                {Object.values(item).map((v, j) => (
+                                  <td key={j} style={STYLE.previewTd}>{String(v)}</td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+
+            {multiData.patterns.length > 0 && (
+              <div style={STYLE.sectionRow(expandedSection === 'PATTERNS')} onClick={() => setExpandedSection(expandedSection === 'PATTERNS' ? null : 'PATTERNS')}>
+                <span>{expandedSection === 'PATTERNS' ? '▼' : '▶'}</span>
+                <span style={{ fontWeight: 600 }}>PATTERNS</span>
+                <span style={{ color: '#6c757d' }}>({multiData.patterns.length} صف → {multiData.sectionSummary.PATTERNS?.groupedCount || '?'} نمط)</span>
+                {confidenceBadge(0.97)}
+                <span style={{ flex: 1 }} />
+                <span style={{ fontSize: 11, color: '#28a745' }}>مكتشف تلقائياً</span>
+              </div>
+            )}
+            {expandedSection === 'PATTERNS' && (
+              <div style={{ padding: '8px 12px 12px', background: '#f8fffe', borderRadius: 6, marginBottom: 4, border: '1px solid #d4edda' }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={STYLE.previewTable}>
+                    <thead><tr><th style={STYLE.previewTh}>ID</th><th style={STYLE.previewTh}>Factors (أول 6)</th></tr></thead>
+                    <tbody>
+                      {multiData.patterns.slice(0, 5).map((p, i) => (
+                        <tr key={i}>
+                          <td style={STYLE.previewTd}>{p.id}</td>
+                          <td style={STYLE.previewTd}>{(p.factors || []).slice(0, 6).join(', ')}...</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {multiData.curves.length > 0 && (
+              <div style={STYLE.sectionRow(expandedSection === 'CURVES')} onClick={() => setExpandedSection(expandedSection === 'CURVES' ? null : 'CURVES')}>
+                <span>{expandedSection === 'CURVES' ? '▼' : '▶'}</span>
+                <span style={{ fontWeight: 600 }}>CURVES</span>
+                <span style={{ color: '#6c757d' }}>({multiData.curves.length} صف → {multiData.sectionSummary.CURVES?.groupedCount || '?'} منحنى)</span>
+                {confidenceBadge(0.95)}
+                <span style={{ flex: 1 }} />
+                <span style={{ fontSize: 11, color: '#28a745' }}>مكتشف تلقائياً</span>
+              </div>
+            )}
+            {expandedSection === 'CURVES' && (
+              <div style={{ padding: '8px 12px 12px', background: '#f8fffe', borderRadius: 6, marginBottom: 4, border: '1px solid #d4edda' }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={STYLE.previewTable}>
+                    <thead><tr><th style={STYLE.previewTh}>ID</th><th style={STYLE.previewTh}>X</th><th style={STYLE.previewTh}>Y</th></tr></thead>
+                    <tbody>
+                      {multiData.curves.slice(0, 8).map((c, i) => (
+                        <tr key={i}>
+                          <td style={STYLE.previewTd}>{c.id}</td>
+                          <td style={STYLE.previewTd}>{c.x}</td>
+                          <td style={STYLE.previewTd}>{c.y}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {multiData.coordinates.length > 0 && (
+              <div style={STYLE.sectionRow(false)}>
+                <span>📎</span>
+                <span style={{ fontWeight: 600 }}>COORDINATES</span>
+                <span style={{ color: '#6c757d' }}>({multiData.coordinates.length} صف — ملحق تصنيفي، سيُدمج تلقائياً)</span>
+                {confidenceBadge(0.99)}
+              </div>
+            )}
+
+            {multiData.tags.length > 0 && (
+              <div style={STYLE.sectionRow(false)}>
+                <span>📎</span>
+                <span style={{ fontWeight: 600 }}>TAGS</span>
+                <span style={{ color: '#6c757d' }}>({multiData.tags.length} صف — ملحق تصنيفي، سيُدمج تلقائياً)</span>
+                {confidenceBadge(0.95)}
+              </div>
+            )}
+
+            {multiData.labels.length > 0 && (
+              <div style={STYLE.sectionRow(false)}>
+                <span>📎</span>
+                <span style={{ fontWeight: 600 }}>LABELS</span>
+                <span style={{ color: '#6c757d' }}>({multiData.labels.length} تسمية — تحليل نصي)</span>
+                {confidenceBadge(0.90)}
+              </div>
+            )}
+
+            {Object.keys(multiData.options).length > 0 && (
+              <div style={STYLE.sectionRow(expandedSection === 'OPTIONS')} onClick={() => setExpandedSection(expandedSection === 'OPTIONS' ? null : 'OPTIONS')}>
+                <span>{expandedSection === 'OPTIONS' ? '▼' : '▶'}</span>
+                <span style={{ fontWeight: 600 }}>⚙️ إعدادات عامة</span>
+                <span style={{ color: '#6c757d' }}>(OPTIONS/TIMES — قيم افتراضية قابلة للمراجعة)</span>
+              </div>
+            )}
+            {expandedSection === 'OPTIONS' && (
+              <div style={{ padding: '8px 12px 12px', background: '#f8f9fa', borderRadius: 6, marginBottom: 4, border: '1px solid #e9ecef' }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={STYLE.previewTable}>
+                    <thead><tr><th style={STYLE.previewTh}>المفتاح</th><th style={STYLE.previewTh}>القيمة</th></tr></thead>
+                    <tbody>
+                      {Object.entries({ ...multiData.options, ...multiData.times }).map(([k, v], i) => (
+                        <tr key={i}>
+                          <td style={STYLE.previewTd}>{k}</td>
+                          <td style={STYLE.previewTd}>{v}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {multiData.junkColumns?.length > 0 && (
+              <div style={STYLE.sectionRow(false)}>
+                <span>🗑️</span>
+                <span style={{ fontWeight: 600 }}>أعمدة متجاهَلة</span>
+                <span style={{ color: '#6c757d' }}>({multiData.junkColumns.length} عمود — قمامة/فارغة)</span>
+              </div>
+            )}
+
+            {multiData.controls.length > 0 && (
+              <div style={STYLE.sectionRow(false)}>
+                <span>📎</span>
+                <span style={{ fontWeight: 600 }}>CONTROLS</span>
+                <span style={{ color: '#6c757d' }}>({multiData.controls.length} حكم تحكم)</span>
+              </div>
+            )}
+
+            {multiData.status.length > 0 && (
+              <div style={STYLE.sectionRow(false)}>
+                <span>📎</span>
+                <span style={{ fontWeight: 600 }}>STATUS</span>
+                <span style={{ color: '#6c757d' }}>({multiData.status.length} حالة)</span>
+              </div>
+            )}
+          </div>
+
+          <div style={STYLE.footer}>
+            <button onClick={onCancel} style={STYLE.btn('secondary')}>إلغاء</button>
+            <button onClick={handleConfirm} style={STYLE.btn('primary')}>
+              تأكيد وتوليد .inp ({multiData.junctions.length + multiData.pipes.length + multiData.valves.length + multiData.pumps.length + multiData.tanks.length + multiData.reservoirs.length} عنصر)
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
