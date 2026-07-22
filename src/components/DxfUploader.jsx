@@ -148,29 +148,8 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode })
       return
     }
 
-    if (projectMode) {
-      setBatchFiles(csvFiles)
-      return
-    }
-
-    fileQueueRef.current = csvFiles
-    queueIndexRef.current = 0
-    setFileQueue(csvFiles)
-    setQueueIndex(0)
-
-    const firstFile = csvFiles[0]
-    setFileName(firstFile.name)
-
-    firstFile.text().then(text => {
-      const lines = text.split(/\r?\n/).filter(l => l.trim())
-      if (lines.length < 2) {
-        alert(`Le fichier ${firstFile.name} ne contient pas assez de données`)
-        advanceQueue()
-        return
-      }
-      setCsvRawContent(text)
-      setShowMapping(true)
-    })
+    setBatchFiles(csvFiles)
+    return
   }, [processFile, projectMode])
 
   const onDrop = useCallback((e) => {
