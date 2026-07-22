@@ -70,21 +70,33 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
   }, [fileStates, onBatchConfirm])
 
   const handleMappingConfirm = useCallback(({ mapping, detectedType, multiData, isMulti }) => {
-    const idx = activeIndex; setShowMapping(false)
+    const idx = activeIndex
+    setShowMapping(false)
     if (isMulti && multiData) updateFile(idx, { status: 'validated', multiData, isMultiSection: true })
     else { const e = fileStates[idx]; updateFile(idx, { status: 'validated', mapping, selectedType: detectedType || e.detectedType, detectedType: detectedType || e.detectedType }) }
     const nx = findNext(idx)
-    if (nx >= 0) setTimeout(() => { setActiveIndex(nx); if (!fileStates[nx].isMultiSection) setShowMapping(true) }, 300)
+    if (nx >= 0) {
+      setActiveIndex(nx)
+      if (!fileStates[nx].isMultiSection) setTimeout(() => setShowMapping(true), 50)
+    }
   }, [activeIndex, fileStates, updateFile, findNext])
 
   const handleMappingCancel = useCallback(() => { setShowMapping(false) }, [])
   const handleMappingStateChange = useCallback((s) => { updateFile(activeIndex, { mapping: s.mapping, selectedType: s.selectedType }) }, [activeIndex, updateFile])
 
   const handleNext = useCallback(() => {
-    if (fileStates[activeIndex]?.status !== 'validated' && !fileStates[activeIndex]?.isMultiSection) return
+    const entry = fileStates[activeIndex]
+    if (entry?.status !== 'validated' && !entry?.isMultiSection) return
+    setShowMapping(false)
     const nx = findNext(activeIndex)
-    if (nx >= 0) { setActiveIndex(nx); if (!fileStates[nx].isMultiSection && fileStates[nx].status !== 'validated') setShowMapping(true); else setShowMapping(false) }
-    else buildAndDownload()
+    if (nx >= 0) {
+      setActiveIndex(nx)
+      if (!fileStates[nx].isMultiSection && fileStates[nx].status !== 'validated') {
+        setTimeout(() => setShowMapping(true), 50)
+      }
+    } else {
+      buildAndDownload()
+    }
   }, [activeIndex, fileStates, findNext, buildAndDownload])
 
   const handlePrev = useCallback(() => { const p = findPrev(activeIndex); if (p >= 0) { setActiveIndex(p); setShowMapping(false) } }, [activeIndex, findPrev])

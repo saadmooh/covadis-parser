@@ -427,7 +427,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
               <div style={STYLE.sectionRow(expandedSection === 'PATTERNS')} onClick={() => setExpandedSection(expandedSection === 'PATTERNS' ? null : 'PATTERNS')}>
                 <span>{expandedSection === 'PATTERNS' ? '▼' : '▶'}</span>
                 <span style={{ fontWeight: 600 }}>PATTERNS</span>
-                <span style={{ color: '#6c757d' }}>({multiData.patterns.length} صف → {multiData.sectionSummary.PATTERNS?.groupedCount || '?'} patterns)</span>
+                <span style={{ color: '#6c757d' }}>({multiData.patterns.length} rows → {multiData.sectionSummary.PATTERNS?.groupedCount || '?'} patterns)</span>
                 {confidenceBadge(0.97)}
                 <span style={{ flex: 1 }} />
                 <span style={{ fontSize: 11, color: '#28a745' }}>Auto-detected</span>
@@ -452,7 +452,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
               <div style={STYLE.sectionRow(expandedSection === 'CURVES')} onClick={() => setExpandedSection(expandedSection === 'CURVES' ? null : 'CURVES')}>
                 <span>{expandedSection === 'CURVES' ? '▼' : '▶'}</span>
                 <span style={{ fontWeight: 600 }}>CURVES</span>
-                <span style={{ color: '#6c757d' }}>({multiData.curves.length} صف → {multiData.sectionSummary.CURVES?.groupedCount || '?'} curves)</span>
+                <span style={{ color: '#6c757d' }}>({multiData.curves.length} rows → {multiData.sectionSummary.CURVES?.groupedCount || '?'} curves)</span>
                 {confidenceBadge(0.95)}
                 <span style={{ flex: 1 }} />
                 <span style={{ fontSize: 11, color: '#28a745' }}>Auto-detected</span>
@@ -477,7 +477,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
               <div style={STYLE.sectionRow(false)}>
                 <span>📎</span>
                 <span style={{ fontWeight: 600 }}>COORDINATES</span>
-                <span style={{ color: '#6c757d' }}>({multiData.coordinates.length} صف — attachment)</span>
+                <span style={{ color: '#6c757d' }}>({multiData.coordinates.length} rows — attachment)</span>
                 {confidenceBadge(0.99)}
               </div>
             )}
@@ -486,7 +486,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
               <div style={STYLE.sectionRow(false)}>
                 <span>📎</span>
                 <span style={{ fontWeight: 600 }}>TAGS</span>
-                <span style={{ color: '#6c757d' }}>({multiData.tags.length} صف — attachment)</span>
+                <span style={{ color: '#6c757d' }}>({multiData.tags.length} rows — attachment)</span>
                 {confidenceBadge(0.95)}
               </div>
             )}
@@ -673,7 +673,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                             {match?.field && !isIgnored ? (
                               <span style={{ fontWeight: 600, fontSize: 13 }}>{match.field}</span>
                             ) : (
-                              <span style={{ color: '#999', fontSize: 12 }}>{isIgnored ? 'تجاهل' : '—'}</span>
+                              <span style={{ color: '#999', fontSize: 12 }}>{isIgnored ? 'Ignore' : '—'}</span>
                             )}
                           </td>
                           <td style={STYLE.td}>
@@ -707,7 +707,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                               }}
                               style={STYLE.select}
                             >
-                              <option value="">-- اختر --</option>
+                              <option value="">-- Select --</option>
                               {Object.entries(allFieldOptions).map(([field]) => (
                                 <option key={field} value={field}>{field}</option>
                               ))}
@@ -716,11 +716,11 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                           <td style={STYLE.td}>
                             {isIgnored ? (
                               <button onClick={() => handleUnignore(header, currentType)} style={{ fontSize: 11, color: '#2c7bb6', background: 'none', border: 'none', cursor: 'pointer' }}>
-                                استعادة
+                                Restore
                               </button>
                             ) : match?.field ? (
                               <button onClick={() => handleIgnore(header, currentType)} style={{ fontSize: 11, color: '#dc3545', background: 'none', border: 'none', cursor: 'pointer' }}>
-                                تجاهل
+                                Ignore
                               </button>
                             ) : null}
                           </td>
@@ -733,7 +733,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
 
               {showPreview && !isSimpleType(currentType) && (
                 <div>
-                  <h4 style={{ margin: '0 0 12px', fontSize: 14, color: '#333' }}>معاينة البيانات</h4>
+                  <h4 style={{ margin: '0 0 12px', fontSize: 14, color: '#333' }}>Data Preview</h4>
                   <div style={{ overflowX: 'auto', border: '1px solid #e0e0e0', borderRadius: 6 }}>
                     <table style={STYLE.previewTable}>
                       <thead>
@@ -770,31 +770,34 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
           <button onClick={onCancel} style={STYLE.btn('secondary')}>Cancel</button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {!currentType && (
-              <span style={{ fontSize: 11, color: '#dc3545' }}>اختر Element Type أولاً</span>
+              <span style={{ fontSize: 11, color: '#dc3545' }}>Select element type first</span>
             )}
             {currentType && !allRequiredMet && !isSpecialType(currentType) && (
-              <span style={{ fontSize: 11, color: '#856404' }}>يرجى تعيين جميع الحقول الإلزامية</span>
+              <span style={{ fontSize: 11, color: '#856404' }}>Please map all required fields</span>
             )}
             {overallValidation.severity === 'blocking' && (
-              <span style={{ fontSize: 11, color: '#dc3545' }}>🔴 أخطاء في التحقق ({overallValidation.totalErrors})</span>
+              <span style={{ fontSize: 11, color: '#dc3545' }}>🔴 Validation errors ({overallValidation.totalErrors})</span>
             )}
             {overallValidation.severity === 'warning' && (
-              <span style={{ fontSize: 11, color: '#856404' }}>🟡 تحذيرات ({overallValidation.totalWarnings})</span>
+              <span style={{ fontSize: 11, color: '#856404' }}>🟡 Warnings ({overallValidation.totalWarnings})</span>
             )}
             <button
               onClick={handleConfirm}
               disabled={!currentType || (!allRequiredMet && !isSpecialType(currentType)) || overallValidation.severity === 'blocking'}
               style={{ ...STYLE.btn('primary'), opacity: currentType && (allRequiredMet || isSpecialType(currentType)) && overallValidation.severity !== 'blocking' ? 1 : 0.5, cursor: currentType ? 'pointer' : 'not-allowed' }}
             >
-              تأكيد {projectMode ? 'وإضافة للمشروع' : 'وتوليد .inp'}
+              Confirm {projectMode ? 'and Add to Project' : 'and Generate .inp'}
             </button>
             {batchMode && (
               <button
-                onClick={onNext}
+                onClick={() => {
+                  if (onStateChange) onStateChange({ mapping: fieldMappings, selectedType: currentType })
+                  onNext()
+                }}
                 disabled={!currentType || (!allRequiredMet && !isSpecialType(currentType)) || overallValidation.severity === 'blocking'}
                 style={{ ...STYLE.btn('info'), opacity: currentType && (allRequiredMet || isSpecialType(currentType)) && overallValidation.severity !== 'blocking' ? 1 : 0.5, cursor: currentType ? 'pointer' : 'not-allowed' }}
               >
-                التالي →
+                Next →
               </button>
             )}
           </div>
