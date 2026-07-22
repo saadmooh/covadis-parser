@@ -411,9 +411,8 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode })
       {batchFiles && (
         <BatchUploadDialog
           files={batchFiles}
-          onAddToProject={onConfirmToProject}
+          onBatchConfirm={onConfirmToProject}
           onCancel={() => setBatchFiles(null)}
-          projectMode={projectMode}
         />
       )}
     </>

@@ -19,19 +19,15 @@ const STYLE = {
   body: { flex: 1, display: 'flex', overflow: 'hidden' },
   sidebar: { width: 280, borderRight: '1px solid #e0e0e0', overflowY: 'auto', flexShrink: 0 },
   content: { flex: 1, overflowY: 'auto', padding: 16 },
-  footer: {
-    padding: '12px 20px', borderTop: '1px solid #e0e0e0', background: '#f7f9fa',
-    display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center',
-  },
   fileItem: (active, status) => ({
     display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px',
     cursor: 'pointer', fontSize: 12, borderBottom: '1px solid #f0f0f0',
     background: active ? '#e8f4fd' : '#fff',
-    borderLeft: `3px solid ${status === 'added' ? '#28a745' : status === 'validated' ? '#28a745' : status === 'mapping_incomplete' || status === 'type_needed' ? '#ffc107' : status === 'type_selected' ? '#17a2b8' : '#dee2e6'}`,
+    borderLeft: `3px solid ${status === 'validated' ? '#28a745' : status === 'mapping_incomplete' || status === 'type_needed' ? '#ffc107' : status === 'type_selected' ? '#17a2b8' : '#dee2e6'}`,
     transition: 'all 0.15s',
   }),
   statusIcon: (status) => {
-    const map = { pending: '⚪', type_needed: '🔴', type_selected: '🟡', mapping_incomplete: '🟡', validated: '🟢', added: '✅' }
+    const map = { pending: '⚪', type_needed: '🔴', type_selected: '🟡', mapping_incomplete: '🟡', validated: '🟢' }
     return map[status] || '⚪'
   },
   btn: (variant) => ({
@@ -45,20 +41,12 @@ const STYLE = {
 const STATUS_LABELS = {
   pending: 'بانتظار المراجعة',
   type_needed: 'يحتاج اختيار النوع',
-  type_selected: 'النوع محدد',
+  type_selected: 'النوع محدد — جاهز للربط',
   mapping_incomplete: 'ربط الأعمدة غير مكتمل',
-  validated: 'جاهز للإضافة',
-  added: 'أُضيف للمشروع',
+  validated: 'تمت المراجعة ✓',
 }
 
-const EMPTY_UPLOAD = { junctions: [], pipes: [], valves: [], pumps: [], tanks: [], reservoirs: [], coordinates: [] }
-
-function mapCsvLocal(parsed, mapping, detectedType) {
-  if (!parsed || !mapping || !detectedType) return EMPTY_UPLOAD
-  return mapCsvToEpanetData(parsed, mapping[detectedType] || {}, detectedType)
-}
-
-export default function BatchUploadDialog({ files, onAddToProject, onCancel, projectMode }) {
+export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
   const [fileStates, setFileStates] = useState(() =>
     files.map((f, i) => ({
       id: `batch_${Date.now()}_${i}`,
@@ -69,6 +57,7 @@ export default function BatchUploadDialog({ files, onAddToProject, onCancel, pro
       isMultiSection: false,
       multiData: null,
       mapping: null,
+      selectedType: null,
       detectedType: null,
       detectedConfidence: 0,
     }))
@@ -162,44 +151,48 @@ export default function BatchUploadDialog({ files, onAddToProject, onCancel, pro
     setShowMapping(false)
   }, [])
 
-  const handleAddSingle = useCallback((index) => {
-    const entry = fileStates[index]
-    if (!entry || entry.status !== 'validated') return
-    const uploadData = entry.isMultiSection && entry.multiData
-      ? entry.multiData
-      : entry.mapping && entry.rawContent
-        ? (() => {
-            const parsed = parseCsvText(entry.rawContent)
-            return parsed ? mapCsvLocal(parsed, { [entry.detectedType]: entry.mapping }, entry.detectedType) : EMPTY_UPLOAD
-          })()
-        : EMPTY_UPLOAD
-    onAddToProject(uploadData, entry.name)
-    updateFileState(index, { status: 'added' })
-  }, [fileStates, onAddToProject, updateFileState])
+  const handleBuildAllAndGenerate = useCallback(async () => {
+    const { generateInp } = await import('../utils/inpGenerator.js')
+    const allData = { junctions: [], pipes: [], valves: [], pumps: [], tanks: [], reservoirs: [], coordinates: [], patterns: [], curves: [], controls: [], status: [] }
 
-  const handleAddAll = useCallback(() => {
-    for (let i = 0; i < fileStates.length; i++) {
-      if (fileStates[i].status === 'validated') {
-        const entry = fileStates[i]
-        const uploadData = entry.isMultiSection && entry.multiData
-          ? entry.multiData
-          : entry.mapping && entry.rawContent
-            ? (() => {
-                const parsed = parseCsvText(entry.rawContent)
-                return parsed ? mapCsvLocal(parsed, { [entry.detectedType]: entry.mapping }, entry.detectedType) : EMPTY_UPLOAD
-              })()
-            : EMPTY_UPLOAD
-        onAddToProject(uploadData, entry.name)
-        updateFileState(i, { status: 'added' })
+    for (const entry of fileStates) {
+      if (entry.status !== 'validated') continue
+      let uploadData = EMPTY_UPLOAD
+      if (entry.isMultiSection && entry.multiData) {
+        uploadData = entry.multiData
+      } else if (entry.mapping && entry.rawContent) {
+        const parsed = parseCsvText(entry.rawContent)
+        if (parsed) {
+          const typeKey = entry.selectedType || entry.detectedType
+          uploadData = mapCsvToEpanetData(parsed, entry.mapping[typeKey] || entry.mapping, typeKey)
+        }
+      }
+      for (const key of Object.keys(allData)) {
+        if (Array.isArray(uploadData[key])) {
+          allData[key] = allData[key].concat(uploadData[key])
+        } else if (typeof uploadData[key] === 'object' && uploadData[key] !== null) {
+          Object.assign(allData[key], uploadData[key])
+        }
       }
     }
-  }, [fileStates, onAddToProject, updateFileState])
+
+    allData.title = 'Batch Generated from CSV Files'
+    const result = generateInp(allData)
+    const blob = new Blob([result.content], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'project_epanet.inp'
+    a.click()
+    URL.revokeObjectURL(url)
+
+    onBatchConfirm(allData)
+  }, [fileStates, onBatchConfirm])
 
   const activeEntry = fileStates[activeIndex]
-  const allValidated = fileStates.every(f => f.status === 'validated' || f.status === 'added')
-  const allAdded = fileStates.every(f => f.status === 'added')
-  const addedCount = fileStates.filter(f => f.status === 'added').length
+  const allValidated = fileStates.every(f => f.status === 'validated')
   const validatedCount = fileStates.filter(f => f.status === 'validated').length
+  const pendingCount = fileStates.filter(f => f.status !== 'validated').length
 
   return (
     <div style={STYLE.overlay}>
@@ -208,16 +201,18 @@ export default function BatchUploadDialog({ files, onAddToProject, onCancel, pro
           <div>
             <h3 style={{ margin: 0, fontSize: 15 }}>📋 طابور مراجعة الملفات — {files.length} ملفات</h3>
             <p style={{ margin: '2px 0 0', fontSize: 11, color: '#6c757d' }}>
-              {addedCount} أُضيف | {validatedCount} جاهز | {fileStates.length - addedCount - validatedCount} يحتاج مراجعة
+              {validatedCount}/{files.length} تمت مراجعته | {pendingCount} متبقي
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={onCancel} style={STYLE.btn('secondary')}>إغلاق</button>
-            {allValidated && !allAdded && (
-              <button onClick={handleAddAll} style={STYLE.btn('primary')}>
-                ✅ تأكيد الكل وإضافة للمشروع ({validatedCount})
-              </button>
-            )}
+            <button onClick={onCancel} style={STYLE.btn('secondary')}>إلغاء</button>
+            <button
+              onClick={handleBuildAllAndGenerate}
+              disabled={!allValidated}
+              style={{ ...STYLE.btn('primary'), opacity: allValidated ? 1 : 0.5, cursor: allValidated ? 'pointer' : 'not-allowed' }}
+            >
+              ✅ تأكيد الكل وإنشاء المشروع ({validatedCount} ملف)
+            </button>
           </div>
         </div>
 
@@ -234,7 +229,7 @@ export default function BatchUploadDialog({ files, onAddToProject, onCancel, pro
                 style={STYLE.fileItem(i === activeIndex, entry.status)}
                 onClick={() => {
                   setActiveIndex(i)
-                  if (!entry.isMultiSection && entry.status !== 'added') setShowMapping(true)
+                  if (!entry.isMultiSection) setShowMapping(true)
                 }}
               >
                 <span>{STYLE.statusIcon(entry.status)}</span>
@@ -250,14 +245,6 @@ export default function BatchUploadDialog({ files, onAddToProject, onCancel, pro
                     {entry.detectedType === 'MULTI' && <span> — مسطّح</span>}
                   </div>
                 </div>
-                {entry.status === 'validated' && !allAdded && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleAddSingle(i) }}
-                    style={{ fontSize: 10, color: '#28a745', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
-                  >
-                    إضافة
-                  </button>
-                )}
               </div>
             ))}
           </div>
@@ -273,7 +260,7 @@ export default function BatchUploadDialog({ files, onAddToProject, onCancel, pro
 
                 {activeEntry.isMultiSection && activeEntry.multiData && (
                   <div style={{ padding: 12, background: '#f8f9fa', borderRadius: 6, fontSize: 12 }}>
-                    <p style={{ margin: '0 0 8px', fontWeight: 600 }}>ملف مسطّح موحّد (multi-section)</p>
+                    <p style={{ margin: '0 0 8px', fontWeight: 600 }}>ملف مسطّح موحّد — تم التحليل تلقائياً</p>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                       {Object.entries(activeEntry.multiData.sectionSummary || {}).map(([section, info]) => (
                         <div key={section} style={{ padding: '4px 8px', background: '#fff', borderRadius: 4, border: '1px solid #e0e0e0' }}>
@@ -281,28 +268,22 @@ export default function BatchUploadDialog({ files, onAddToProject, onCancel, pro
                         </div>
                       ))}
                     </div>
-                    <button
-                      onClick={() => handleAddSingle(activeIndex)}
-                      disabled={activeEntry.status === 'added'}
-                      style={{ ...STYLE.btn('primary'), marginTop: 12, opacity: activeEntry.status === 'added' ? 0.5 : 1 }}
-                    >
-                      {activeEntry.status === 'added' ? 'تمت الإضافة ✓' : '✅ تأكيد وإضافة هذا الملف'}
-                    </button>
+                    <p style={{ margin: '8px 0 0', color: '#28a745', fontSize: 11 }}>✅ جاهز — لا يحتاج مراجعة يدوية</p>
                   </div>
                 )}
 
-                {!activeEntry.isMultiSection && activeEntry.status !== 'added' && (
+                {!activeEntry.isMultiSection && activeEntry.status === 'validated' && (
+                  <div style={{ padding: 12, background: '#d4edda', borderRadius: 6, fontSize: 12, color: '#155724' }}>
+                    ✅ تمت مراجعة هذا الملف — الربط محفوظ
+                  </div>
+                )}
+
+                {!activeEntry.isMultiSection && activeEntry.status !== 'validated' && (
                   <div style={{ padding: 12, background: '#f8f9fa', borderRadius: 6, fontSize: 12 }}>
-                    <p style={{ margin: '0 0 8px' }}>اضغط على الملف في القائمة لفتح شاشة ربط الأعمدة</p>
+                    <p style={{ margin: '0 0 8px' }}>هذه المرحلة مخصصة فقط لإسناد الأعمدة — لا يتم إنشاء ملفات هنا</p>
                     <button onClick={() => setShowMapping(true)} style={STYLE.btn('info')}>
                       مراجعة ربط الأعمدة
                     </button>
-                  </div>
-                )}
-
-                {activeEntry.status === 'added' && (
-                  <div style={{ padding: 16, textAlign: 'center', color: '#28a745', fontSize: 14 }}>
-                    ✅ تمت إضافة هذا الملف للمشروع بنجاح
                   </div>
                 )}
               </div>
@@ -317,7 +298,6 @@ export default function BatchUploadDialog({ files, onAddToProject, onCancel, pro
           rawCsv={activeEntry.rawContent}
           onConfirm={handleMappingConfirm}
           onCancel={handleMappingCancel}
-          projectMode={projectMode}
           initialMapping={activeEntry.mapping ? { ...activeEntry.mapping, _selectedType: activeEntry.selectedType } : undefined}
           onStateChange={handleMappingStateChange}
         />
@@ -325,3 +305,5 @@ export default function BatchUploadDialog({ files, onAddToProject, onCancel, pro
     </div>
   )
 }
+
+const EMPTY_UPLOAD = { junctions: [], pipes: [], valves: [], pumps: [], tanks: [], reservoirs: [], coordinates: [], patterns: [], curves: [], controls: [], status: [] }
