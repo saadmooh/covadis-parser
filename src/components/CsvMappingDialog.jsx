@@ -174,7 +174,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
 
   const mappedRequiredCount = useMemo(() => {
     return requiredFields.filter(f =>
-      Object.values(mergedMappings).some(m => m.field === f && !m.ignored && m.section === currentType)
+      Object.values(mergedMappings).some(m => m && m.field === f && !m.ignored && m.section === currentType)
     ).length
   }, [requiredFields, mergedMappings, currentType])
 
@@ -257,7 +257,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
     if (!parsed || !currentType) return {}
     const results = {}
     for (const header of parsed.headers) {
-      const match = mergedMappings[`${currentType}__${header}`]
+      const match = mergedMappings[`${currentType}__${header}`] || null
       if (!match || match.ignored || !match.field) continue
       const colValues = parsed.rows.map(r => r[header])
       results[header] = validateColumnAssignment(colValues, match.field)
@@ -647,7 +647,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                   }}>
                     Required fields: {mappedRequiredCount}/{requiredFields.length}
                     {!allRequiredMet && (
-                      <span> — Missing: {requiredFields.filter(f => !Object.values(mergedMappings).some(m => m.field === f && !m.ignored && m.section === currentType)).join(', ')}</span>
+                      <span> — Missing: {requiredFields.filter(f => !Object.values(mergedMappings).some(m => m && m.field === f && !m.ignored && m.section === currentType)).join(', ')}</span>
                     )}
                   </div>
                 )}
