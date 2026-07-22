@@ -801,8 +801,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                   if (onStateChange) onStateChange({ mapping: fieldMappings, selectedType: currentType })
                   onNext()
                 }}
-                disabled={!currentType || (!allRequiredMet && !isSpecialType(currentType)) || overallValidation.severity === 'blocking'}
-                style={{ ...STYLE.btn('primary'), opacity: currentType && (allRequiredMet || isSpecialType(currentType)) && overallValidation.severity !== 'blocking' ? 1 : 0.5, cursor: currentType ? 'pointer' : 'not-allowed' }}
+                style={{ ...STYLE.btn('primary') }}
               >
                 Next →
               </button>

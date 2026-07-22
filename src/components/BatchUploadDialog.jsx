@@ -49,7 +49,10 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
     return () => { off = true }
   }, [])
 
-  const findNext = useCallback((from) => { for (let i = from + 1; i < fileStates.length; i++) if (fileStates[i].status !== 'validated') return i; for (let i = 0; i < from; i++) if (fileStates[i].status !== 'validated') return i; return -1 }, [fileStates])
+  const findNext = useCallback((from) => {
+    if (from + 1 < fileStates.length) return from + 1
+    return -1
+  }, [fileStates])
   const findPrev = useCallback((from) => { for (let i = from - 1; i >= 0; i--) if (fileStates[i].status !== 'validated') return i; for (let i = fileStates.length - 1; i > from; i--) if (fileStates[i].status !== 'validated') return i; return -1 }, [fileStates])
 
   const buildAndDownload = useCallback(async () => {
@@ -85,15 +88,11 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
   const handleMappingStateChange = useCallback((s) => { updateFile(activeIndex, { mapping: s.mapping, selectedType: s.selectedType }) }, [activeIndex, updateFile])
 
   const handleNext = useCallback(() => {
-    const entry = fileStates[activeIndex]
-    if (entry?.status !== 'validated' && !entry?.isMultiSection) return
     setShowMapping(false)
     const nx = findNext(activeIndex)
     if (nx >= 0) {
       setActiveIndex(nx)
-      if (!fileStates[nx].isMultiSection && fileStates[nx].status !== 'validated') {
-        setTimeout(() => setShowMapping(true), 50)
-      }
+      if (!fileStates[nx].isMultiSection) setTimeout(() => setShowMapping(true), 50)
     } else {
       buildAndDownload()
     }
@@ -104,7 +103,7 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
   const active = fileStates[activeIndex]
   const allDone = fileStates.every(f => f.status === 'validated')
   const vCount = fileStates.filter(f => f.status === 'validated').length
-  const isLastStep = allDone
+  const isLastStep = activeIndex === fileStates.length - 1
   const canNext = active?.status === 'validated' || active?.isMultiSection
   const canPrev = findPrev(activeIndex) >= 0
 
@@ -165,7 +164,7 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
         </div>
         <div style={STYLE.nav}>
           <button onClick={handlePrev} disabled={!canPrev} style={{ ...STYLE.btn('secondary'), opacity: canPrev ? 1 : 0.4 }}>← Previous</button>
-          <button onClick={isLastStep ? buildAndDownload : handleNext} disabled={!canNext && !isLastStep} style={{ ...STYLE.btn(isLastStep ? 'primary' : 'info'), opacity: canNext || isLastStep ? 1 : 0.4 }}>
+          <button onClick={isLastStep ? buildAndDownload : handleNext} style={{ ...STYLE.btn(isLastStep ? 'primary' : 'info') }}>
             {isLastStep ? '✅ Finish Review & Generate EPANET Project' : 'Next →'}
           </button>
         </div>
