@@ -130,6 +130,13 @@ export default function BatchUploadDialog({ files, onAddToProject, onCancel, pro
     })
   }, [])
 
+  const handleMappingStateChange = useCallback((state) => {
+    updateFileState(activeIndex, {
+      mapping: state.mapping,
+      selectedType: state.selectedType,
+    })
+  }, [activeIndex, updateFileState])
+
   const handleMappingConfirm = useCallback(({ mapping, detectedType, multiData, isMulti }) => {
     const idx = activeIndex
     setShowMapping(false)
@@ -145,6 +152,7 @@ export default function BatchUploadDialog({ files, onAddToProject, onCancel, pro
       updateFileState(idx, {
         status: 'validated',
         mapping,
+        selectedType: detectedType || entry.detectedType,
         detectedType: detectedType || entry.detectedType,
       })
     }
@@ -305,10 +313,13 @@ export default function BatchUploadDialog({ files, onAddToProject, onCancel, pro
 
       {showMapping && activeEntry && !activeEntry.isMultiSection && activeEntry.rawContent && (
         <CsvMappingDialog
+          key={activeEntry.id}
           rawCsv={activeEntry.rawContent}
           onConfirm={handleMappingConfirm}
           onCancel={handleMappingCancel}
           projectMode={projectMode}
+          initialMapping={activeEntry.mapping ? { ...activeEntry.mapping, _selectedType: activeEntry.selectedType } : undefined}
+          onStateChange={handleMappingStateChange}
         />
       )}
     </div>

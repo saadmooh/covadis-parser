@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { EPANET_SCHEMA, getRequiredFields } from '../utils/schemaDictionary.js'
 import { detectTableType, parseCsvText, isMultiSectionCsv, parseMultiSectionCsv, suggestMappingsForType } from '../utils/csvAutoDetector.js'
 import { validateColumnAssignment } from '../utils/fieldValidator.js'
@@ -84,8 +84,8 @@ const SIMPLE_FIELDS = {
   TAGS: ['objectType', 'id', 'tag'],
 }
 
-export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectMode }) {
-  const [fieldMappings, setFieldMappings] = useState({})
+export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectMode, initialMapping, onStateChange }) {
+  const [fieldMappings, setFieldMappings] = useState(initialMapping || {})
   const [showPreview, setShowPreview] = useState(true)
   const [expandedSection, setExpandedSection] = useState(null)
   const [notification, setNotification] = useState(null)
@@ -114,7 +114,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
   const confidence = detection?.confidence || 0
   const isHighConfidence = confidence >= 0.85
 
-  const [selectedType, setSelectedType] = useState(null)
+  const [selectedType, setSelectedType] = useState(initialMapping?._selectedType || null)
   const currentType = selectedType || (isHighConfidence ? detectedType : null)
 
   const autoSuggestions = useMemo(() => {
@@ -198,6 +198,12 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
       return { ...prev, [key]: { ...(prev[key] || {}), ignored: false, auto: false } }
     })
   }, [])
+
+  useEffect(() => {
+    if (onStateChange) {
+      onStateChange({ mapping: fieldMappings, selectedType: currentType })
+    }
+  }, [fieldMappings, currentType])
 
   const handleConfirm = useCallback(() => {
     if (isMulti && multiData) {
