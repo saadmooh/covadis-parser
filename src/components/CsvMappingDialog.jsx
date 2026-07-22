@@ -101,10 +101,6 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
   }, [rawCsv])
 
   useEffect(() => {
-    setFieldMappings(initialMapping || {})
-  }, [initialMapping])
-
-  useEffect(() => {
     setExpandedSection(null)
     setShowPreview(true)
   }, [rawCsv, batchMode])
@@ -188,10 +184,10 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
   }, [])
 
   const handleMappingChange = useCallback((header, field, section) => {
-    setFieldMappings(prev => ({
-      ...prev,
-      [`${section}__${header}`]: { field, section, score: 0, ignored: false, auto: false },
-    }))
+    setFieldMappings(prev => {
+      const next = { ...prev, [`${section}__${header}`]: { field, section, score: 0, ignored: false, auto: false } }
+      return next
+    })
   }, [])
 
   const handleIgnore = useCallback((header, section) => {
