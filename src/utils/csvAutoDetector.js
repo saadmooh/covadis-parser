@@ -561,6 +561,48 @@ export function detectTableType(headers, rows) {
   }
 }
 
+export function mapCsvToEpanetData(parsed, mapping, detectedType) {
+  if (!parsed || !detectedType) return { junctions: [], pipes: [], valves: [], pumps: [], tanks: [], reservoirs: [], coordinates: [] }
+  const { headers, rows } = parsed
+  const colMap = {}
+  for (const [csvHeader, field] of Object.entries(mapping)) {
+    const idx = headers.findIndex(h => h.toLowerCase() === csvHeader.toLowerCase())
+    if (idx >= 0) colMap[field] = idx
+  }
+  const result = { junctions: [], pipes: [], valves: [], pumps: [], tanks: [], reservoirs: [], coordinates: [] }
+  for (const row of rows) {
+    const get = (f) => { const i = colMap[f]; return i !== undefined ? (row[headers[i]] || '') : '' }
+    const num = (f) => { const v = get(f); return v ? Number(v) : 0 }
+    const str = (f) => get(f) || ''
+    if (detectedType === 'JUNCTIONS') {
+      const id = str('id') || `J${result.junctions.length + 1}`
+      const j = { id, elevation: num('elevation'), demand: num('demand'), pattern: str('pattern') }
+      const x = num('x'), y = num('y')
+      if (x && y) result.coordinates.push({ id, x, y })
+      result.junctions.push(j)
+    } else if (detectedType === 'PIPES') {
+      const id = str('id') || `P${result.pipes.length + 1}`
+      const n1 = str('node1'), n2 = str('node2')
+      if (n1 && n2) result.pipes.push({ id, node1: n1, node2: n2, length: num('length'), diameter: num('diameter'), roughness: num('roughness') || 140, minorLoss: num('minorLoss'), status: str('status') || 'Open' })
+    } else if (detectedType === 'RESERVOIRS') {
+      const id = str('id') || `R${result.reservoirs.length + 1}`
+      result.reservoirs.push({ id, head: num('head'), pattern: str('pattern') })
+    } else if (detectedType === 'TANKS') {
+      const id = str('id') || `T${result.tanks.length + 1}`
+      result.tanks.push({ id, elevation: num('elevation'), initLevel: num('initLevel'), minLevel: num('minLevel'), maxLevel: num('maxLevel'), diameter: num('diameter'), minVol: num('minVol'), volCurve: str('volCurve') })
+    } else if (detectedType === 'PUMPS') {
+      const id = str('id') || `PU${result.pumps.length + 1}`
+      const n1 = str('node1'), n2 = str('node2')
+      if (n1 && n2) result.pumps.push({ id, node1: n1, node2: n2, parameters: str('parameters'), curve: str('curve'), pattern: str('pattern') })
+    } else if (detectedType === 'VALVES') {
+      const id = str('id') || `V${result.valves.length + 1}`
+      const n1 = str('node1'), n2 = str('node2')
+      if (n1 && n2) result.valves.push({ id, node1: n1, node2: n2, diameter: num('diameter'), type: str('type') || 'PRV', setting: num('setting'), minorLoss: num('minorLoss') })
+    }
+  }
+  return result
+}
+
 export function detectAllTables(files) {
   const results = []
   for (const file of files) {

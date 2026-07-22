@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, useEffect } from 'react'
 import CsvMappingDialog from './CsvMappingDialog'
+import BatchUploadDialog from './BatchUploadDialog'
 
 export default function DxfUploader({ onData, onConfirmToProject, projectMode }) {
   const inputRef = useRef(null)
@@ -8,6 +9,7 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode })
   const [dragOver, setDragOver] = useState(false)
   const [csvRawContent, setCsvRawContent] = useState('')
   const [showMapping, setShowMapping] = useState(false)
+  const [batchFiles, setBatchFiles] = useState(null)
   const [fileQueue, setFileQueue] = useState([])
   const [queueIndex, setQueueIndex] = useState(0)
 
@@ -132,36 +134,44 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode })
     const fileArray = Array.from(files)
     if (fileArray.length === 0) return
 
-    if (fileArray.length === 1) {
-      processFile(fileArray[0])
+    const csvFiles = fileArray.filter(f => f.name.toLowerCase().endsWith('.csv'))
+    const otherFiles = fileArray.filter(f => !f.name.toLowerCase().endsWith('.csv'))
+
+    for (const f of otherFiles) {
+      processFile(f)
+    }
+
+    if (csvFiles.length === 0) return
+
+    if (csvFiles.length === 1 && fileArray.length === 1) {
+      processFile(csvFiles[0])
       return
     }
 
-    fileQueueRef.current = fileArray
+    if (projectMode) {
+      setBatchFiles(csvFiles)
+      return
+    }
+
+    fileQueueRef.current = csvFiles
     queueIndexRef.current = 0
-    setFileQueue(fileArray)
+    setFileQueue(csvFiles)
     setQueueIndex(0)
 
-    const firstFile = fileArray[0]
+    const firstFile = csvFiles[0]
     setFileName(firstFile.name)
 
-    if (firstFile.name.toLowerCase().endsWith('.csv')) {
-      firstFile.text().then(text => {
-        const lines = text.split(/\r?\n/).filter(l => l.trim())
-        if (lines.length < 2) {
-          alert(`Le fichier ${firstFile.name} ne contient pas assez de données`)
-          advanceQueue()
-          return
-        }
-        setCsvRawContent(text)
-        setShowMapping(true)
-      })
-    } else {
-      processFile(firstFile).then(() => {
+    firstFile.text().then(text => {
+      const lines = text.split(/\r?\n/).filter(l => l.trim())
+      if (lines.length < 2) {
+        alert(`Le fichier ${firstFile.name} ne contient pas assez de données`)
         advanceQueue()
-      })
-    }
-  }, [processFile, advanceQueue])
+        return
+      }
+      setCsvRawContent(text)
+      setShowMapping(true)
+    })
+  }, [processFile, projectMode])
 
   const onDrop = useCallback((e) => {
     e.preventDefault()
@@ -394,6 +404,15 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode })
           rawCsv={csvRawContent}
           onConfirm={handleMappingConfirm}
           onCancel={handleMappingCancel}
+          projectMode={projectMode}
+        />
+      )}
+
+      {batchFiles && (
+        <BatchUploadDialog
+          files={batchFiles}
+          onAddToProject={onConfirmToProject}
+          onCancel={() => setBatchFiles(null)}
           projectMode={projectMode}
         />
       )}
