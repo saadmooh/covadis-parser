@@ -141,7 +141,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
   const mergedMappings = useMemo(() => {
     const preserved = {}
     for (const [key, val] of Object.entries(fieldMappings)) {
-      if (!val || !val.auto || !autoSuggestions[key.split('__')[1]]) {
+      if (val && (!val.auto || !autoSuggestions[key.split('__')[1]])) {
         preserved[key] = val
       }
     }
@@ -155,7 +155,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
       }
     }
     for (const [key, val] of Object.entries(preserved)) {
-      if (!result[key]) result[key] = val
+      if (val && !result[key]) result[key] = val
     }
     return result
   }, [autoSuggestions, fieldMappings, currentType])
