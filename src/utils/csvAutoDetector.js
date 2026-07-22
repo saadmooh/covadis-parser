@@ -4,8 +4,31 @@ import { matchColumnToFields } from './fuzzyMatcher.js'
 
 const DETECTABLE_SECTIONS = ['JUNCTIONS', 'RESERVOIRS', 'TANKS', 'PIPES', 'PUMPS', 'VALVES', 'PATTERNS', 'CURVES']
 
+const SECTION_FIELD_MAP = {
+  JUNCTIONS: ['id', 'elevation', 'demand', 'pattern'],
+  RESERVOIRS: ['id', 'head', 'pattern'],
+  TANKS: ['id', 'elevation', 'initLevel', 'minLevel', 'maxLevel', 'diameter', 'minVol', 'volCurve'],
+  PIPES: ['id', 'node1', 'node2', 'length', 'diameter', 'roughness', 'minorLoss', 'status'],
+  PUMPS: ['id', 'node1', 'node2', 'parameters'],
+  VALVES: ['id', 'node1', 'node2', 'diameter', 'type', 'setting', 'minorLoss'],
+  PATTERNS: ['id', 'factors'],
+  CURVES: ['id', 'x', 'y'],
+  COORDINATES: ['id', 'x', 'y'],
+  OPTIONS: ['key', 'value'],
+  TIMES: ['key', 'value'],
+  STATUS: ['id', 'status'],
+  CONTROLS: ['text'],
+  TAGS: ['id', 'tag'],
+  LABELS: ['text'],
+  ENERGY: ['key', 'value'],
+  REACTIONS: ['key', 'value'],
+  REPORT: ['key', 'value'],
+  BACKDROP: [],
+}
+
 export function parseCsvText(text) {
-  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  const clean = text.replace(/^\uFEFF/, '')
+  const lines = clean.split(/\r?\n/).filter(l => l.trim())
   if (lines.length < 2) return null
   const delimiter = detectDelimiter(lines[0])
   const headers = lines[0].split(delimiter).map(h => h.trim())
@@ -17,6 +40,110 @@ export function parseCsvText(text) {
     rows.push(row)
   }
   return { headers, rows, delimiter }
+}
+
+export function isMultiSectionCsv(text) {
+  const clean = text.replace(/^\uFEFF/, '')
+  const lines = clean.split(/\r?\n/).filter(l => l.trim())
+  if (lines.length < 2) return false
+  const delimiter = detectDelimiter(lines[0])
+  const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase().replace(/^\uFEFF/, ''))
+  const firstHeader = headers[0]
+  if (firstHeader !== 'section' && firstHeader !== 'type' && firstHeader !== 'categorie') return false
+  const sectionCounts = {}
+  const step = Math.max(1, Math.floor(lines.length / 200))
+  for (let i = 1; i < lines.length; i += step) {
+    const vals = lines[i].split(delimiter)
+    const section = (vals[0] || '').trim().toUpperCase()
+    sectionCounts[section] = (sectionCounts[section] || 0) + 1
+  }
+  const ALL_SECTIONS = [...DETECTABLE_SECTIONS, 'COORDINATES', 'OPTIONS', 'TIMES', 'STATUS', 'CONTROLS', 'TAGS', 'LABELS', 'ENERGY', 'REACTIONS', 'REPORT', 'BACKDROP']
+  const knownSections = Object.keys(sectionCounts).filter(s => ALL_SECTIONS.includes(s))
+  return knownSections.length >= 2
+}
+
+export function parseMultiSectionCsv(text) {
+  const clean = text.replace(/^\uFEFF/, '')
+  const lines = clean.split(/\r?\n/).filter(l => l.trim())
+  if (lines.length < 2) return null
+  const delimiter = detectDelimiter(lines[0])
+  const headers = lines[0].split(delimiter).map(h => h.trim())
+
+  const sectionRows = {}
+  for (let i = 1; i < lines.length; i++) {
+    const vals = lines[i].split(delimiter).map(v => v.trim())
+    const section = (vals[0] || '').toUpperCase()
+    if (!section) continue
+    if (!sectionRows[section]) sectionRows[section] = []
+    const row = {}
+    headers.forEach((h, idx) => { row[h] = vals[idx] || '' })
+    sectionRows[section].push(row)
+  }
+
+  const result = {
+    junctions: [], reservoirs: [], tanks: [], pipes: [], pumps: [],
+    valves: [], patterns: [], curves: [], coordinates: [],
+    options: {}, times: {}, status: [], controls: [],
+    tags: [], labels: [], reactions: [], report: [],
+  }
+
+  const fieldMap = SECTION_FIELD_MAP
+
+  for (const [section, rows] of Object.entries(sectionRows)) {
+    const fields = fieldMap[section]
+    if (!fields) continue
+
+    if (section === 'OPTIONS' || section === 'TIMES' || section === 'ENERGY' || section === 'REACTIONS' || section === 'REPORT') {
+      for (const row of rows) {
+        const vals = extractColValues(row, headers)
+        if (vals.length >= 2 && vals[0]) {
+          if (section === 'OPTIONS') result.options[vals[0]] = vals[1]
+          else if (section === 'TIMES') result.times[vals[0]] = vals[1]
+        }
+      }
+      continue
+    }
+
+    if (section === 'CONTROLS') {
+      for (const row of rows) {
+        const vals = extractColValues(row, headers)
+        const text = vals.filter(v => v && v !== ';').join(',').trim()
+        if (text) result.controls.push(text)
+      }
+      continue
+    }
+
+    for (const row of rows) {
+      const vals = extractColValues(row, headers)
+      const obj = {}
+      fields.forEach((f, i) => {
+        if (f === 'factors') {
+          obj[f] = vals.slice(1).filter(v => v && v !== ';').map(Number).filter(n => !isNaN(n))
+        } else {
+          const v = vals[i] || ''
+          obj[f] = isNaN(Number(v)) || v === '' ? v : Number(v)
+        }
+      })
+
+      if (section === 'JUNCTIONS') result.junctions.push(obj)
+      else if (section === 'RESERVOIRS') result.reservoirs.push(obj)
+      else if (section === 'TANKS') result.tanks.push(obj)
+      else if (section === 'PIPES') result.pipes.push(obj)
+      else if (section === 'PUMPS') result.pumps.push(obj)
+      else if (section === 'VALVES') result.valves.push(obj)
+      else if (section === 'PATTERNS') result.patterns.push(obj)
+      else if (section === 'CURVES') result.curves.push(obj)
+      else if (section === 'COORDINATES') result.coordinates.push(obj)
+      else if (section === 'STATUS') result.status.push(obj)
+      else if (section === 'TAGS') result.tags.push(obj)
+    }
+  }
+
+  return result
+}
+
+function extractColValues(row, headers) {
+  return headers.slice(1).map(h => (row[h] || '').replace(/^;.*$/, '').trim())
 }
 
 function detectDelimiter(headerLine) {

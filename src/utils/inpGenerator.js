@@ -23,6 +23,10 @@ export function generateInp(mappedData) {
     patterns = [],
     curves = [],
     coordinates = [],
+    options = {},
+    times = {},
+    controls = [],
+    status = [],
     title = 'Generated from CSV',
   } = mappedData
 
@@ -46,10 +50,16 @@ export function generateInp(mappedData) {
   sections.push('')
 
   sections.push('[OPTIONS]')
-  sections.push('Flow\t\tUnits\t\tLPS')
-  sections.push('Headloss\tHazen-Williams')
-  sections.push('Hydraul\t\tNone')
-  sections.push('Quality\t\tNone')
+  if (Object.keys(options).length > 0) {
+    for (const [key, value] of Object.entries(options)) {
+      sections.push(`${key}\t\t${value}`)
+    }
+  } else {
+    sections.push('Flow\t\tUnits\t\tLPS')
+    sections.push('Headloss\tHazen-Williams')
+    sections.push('Hydraul\t\tNone')
+    sections.push('Quality\t\tNone')
+  }
   sections.push('')
 
   sections.push('[JUNCTIONS]')
@@ -174,17 +184,40 @@ export function generateInp(mappedData) {
     sections.push('')
   }
 
-  sections.push('[CONTROLS]')
-  sections.push('')
+  if (controls.length > 0) {
+    sections.push('[CONTROLS]')
+    for (const c of controls) {
+      sections.push(c)
+    }
+    sections.push('')
+  } else {
+    sections.push('[CONTROLS]')
+    sections.push('')
+  }
+
+  if (status.length > 0) {
+    sections.push('[STATUS]')
+    sections.push(';ID\tStatus')
+    for (const s of status) {
+      sections.push(fmtLine([s.id, s.status || '']))
+    }
+    sections.push('')
+  }
 
   sections.push('[TIMES]')
-  sections.push('Duration\t\t\t0')
-  sections.push('Hydraulic Timestep\t\t1:00')
-  sections.push('Quality Timestep\t\t0:05')
-  sections.push('Pattern Timestep\t\t1:00')
-  sections.push('Pattern Start\t\t\t0:00')
-  sections.push('Report Start\t\t\t0:00')
-  sections.push('Statistics\t\t\tNone')
+  if (Object.keys(times).length > 0) {
+    for (const [key, value] of Object.entries(times)) {
+      sections.push(`${key}\t\t\t${value}`)
+    }
+  } else {
+    sections.push('Duration\t\t\t0')
+    sections.push('Hydraulic Timestep\t\t1:00')
+    sections.push('Quality Timestep\t\t0:05')
+    sections.push('Pattern Timestep\t\t1:00')
+    sections.push('Pattern Start\t\t\t0:00')
+    sections.push('Report Start\t\t\t0:00')
+    sections.push('Statistics\t\t\tNone')
+  }
   sections.push('')
 
   sections.push('[REPORT]')

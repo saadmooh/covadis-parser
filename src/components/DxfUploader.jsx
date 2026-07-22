@@ -38,16 +38,47 @@ export default function DxfUploader({ onData }) {
           setLoading(false)
           return
         }
-        const { parseCsvText } = await import('../utils/csvAutoDetector.js')
-        const parsed = parseCsvText(text)
-        if (!parsed) {
-          alert('Fichier CSV trop court ou vide')
-          setLoading(false)
-          return
-        }
+        const { parseCsvText, isMultiSectionCsv, parseMultiSectionCsv } = await import('../utils/csvAutoDetector.js')
 
-        setCsvRawContent(text)
-        setShowMapping(true)
+        if (isMultiSectionCsv(text)) {
+          const data = parseMultiSectionCsv(text)
+          if (!data) {
+            alert('Erreur lors du parsing du fichier CSV multi-section')
+            setLoading(false)
+            return
+          }
+          const { generateInp, generateSummary } = await import('../utils/inpGenerator.js')
+          data.title = `Generated from ${file.name}`
+          const result = generateInp(data)
+          const blob = new Blob([result.content], { type: 'text/plain' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = file.name.replace(/\.csv$/i, '.inp')
+          a.click()
+          URL.revokeObjectURL(url)
+
+          const summary = generateSummary(result)
+          alert(summary)
+
+          onData({
+            junctions: data.junctions || [],
+            pipes: data.pipes || [],
+            valves: data.valves || [],
+            pumps: data.pumps || [],
+            tanks: data.tanks || [],
+            reservoirs: data.reservoirs || [],
+          }, file.name.replace(/\.csv$/i, '.inp'), 'epanet-inp')
+        } else {
+          const parsed = parseCsvText(text)
+          if (!parsed) {
+            alert('Fichier CSV trop court ou vide')
+            setLoading(false)
+            return
+          }
+          setCsvRawContent(text)
+          setShowMapping(true)
+        }
       } catch (err) {
         console.error(err)
         alert('Erreur lors du chargement du CSV: ' + err.message)

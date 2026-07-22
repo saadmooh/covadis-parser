@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseCsvText, detectTableType } from '../csvAutoDetector.js'
+import { parseCsvText, detectTableType, isMultiSectionCsv, parseMultiSectionCsv } from '../csvAutoDetector.js'
 
 describe('parseCsvText', () => {
   it('parses a standard CSV', () => {
@@ -119,5 +119,66 @@ describe('detectTableType - ambiguous cases', () => {
         expect(result.ambiguous).toBe(true)
       }
     }
+  })
+})
+
+describe('isMultiSectionCsv', () => {
+  it('detects multi-section CSV format', () => {
+    const csv = `Section,col1,col2,col3
+JUNCTIONS,J1,100,1.5
+JUNCTIONS,J2,200,2.3
+PIPES,P1,J1,J2,100,200,140`
+    expect(isMultiSectionCsv(csv)).toBe(true)
+  })
+
+  it('returns false for single-section CSV', () => {
+    const csv = `id,elevation,demand
+J1,100,1.5
+J2,200,2.3`
+    expect(isMultiSectionCsv(csv)).toBe(false)
+  })
+})
+
+describe('parseMultiSectionCsv', () => {
+  it('parses junctions and pipes from multi-section CSV', () => {
+    const csv = `Section,col1,col2,col3,col4,col5,col6,col7
+JUNCTIONS,J1,100,1.5,DMA1_pat
+JUNCTIONS,J2,200,0,DMA1_pat
+PIPES,P1,J1,J2,100,200,140,Open
+COORDINATES,J1,500000,4500000
+COORDINATES,J2,500100,4500000`
+    const result = parseMultiSectionCsv(csv)
+    expect(result.junctions.length).toBe(2)
+    expect(result.junctions[0].id).toBe('J1')
+    expect(result.junctions[0].elevation).toBe(100)
+    expect(result.pipes.length).toBe(1)
+    expect(result.pipes[0].node1).toBe('J1')
+    expect(result.coordinates.length).toBe(2)
+  })
+
+  it('parses valves and pumps', () => {
+    const csv = `Section,col1,col2,col3,col4,col5,col6,col7,col8
+JUNCTIONS,J1,50,0
+JUNCTIONS,J2,60,0
+PIPES,P1,J1,J2,100,200,140,Open
+PUMPS,PU1,J1,J2,HEAD 8
+VALVES,V1,J1,J2,200,PRV,40,0`
+    const result = parseMultiSectionCsv(csv)
+    expect(result.pumps.length).toBe(1)
+    expect(result.pumps[0].id).toBe('PU1')
+    expect(result.valves.length).toBe(1)
+    expect(result.valves[0].type).toBe('PRV')
+  })
+
+  it('parses patterns and curves', () => {
+    const csv = `Section,col1,col2,col3,col4,col5
+PATTERNS,DMA1_pat,0.5,0.6,0.7
+PATTERNS,DMA1_pat,0.8,0.9,1.0
+CURVES,C1,10,100
+CURVES,C1,20,200`
+    const result = parseMultiSectionCsv(csv)
+    expect(result.patterns.length).toBe(2)
+    expect(result.patterns[0].id).toBe('DMA1_pat')
+    expect(result.curves.length).toBe(2)
   })
 })
