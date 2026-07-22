@@ -312,6 +312,37 @@ function detectDelimiter(headerLine) {
   return Object.entries(counts).find(([, v]) => v === max)[0]
 }
 
+export function suggestFieldForColumn(header, rows, sectionKey) {
+  const schema = EPANET_SCHEMA[sectionKey]
+  if (!schema?.synonyms) return { field: null, score: 0 }
+  const colValues = rows.map(r => normalizeValue(r[header]))
+  const fp = fingerprintColumn(colValues.slice(0, 50), header)
+  let bestField = null
+  let bestScore = 0
+  for (const [field, synonyms] of Object.entries(schema.synonyms)) {
+    const filtered = synonyms.filter(s => s.length > 2)
+    if (filtered.length === 0) continue
+    const match = matchColumnToFields(header, { [field]: filtered }, 0.35)
+    if (match.length > 0 && match[0].score > 0.35) {
+      const fpHint = fp.fingerprintHints.find(h => h.field === field)
+      const fpBoost = fpHint ? fpHint.strength * 0.3 : 0
+      const combined = match[0].score * 0.6 + fpBoost * 0.4
+      if (combined > bestScore) {
+        bestScore = combined
+        bestField = field
+      }
+    }
+  }
+  return { field: bestField, score: bestScore }
+}
+
+export function suggestMappingsForType(headers, rows, sectionKey) {
+  return headers.map(header => {
+    const { field, score } = suggestFieldForColumn(header, rows, sectionKey)
+    return { header, field, score }
+  })
+}
+
 function collectColumnValues(rows, header) {
   return rows.map(r => normalizeValue(r[header]))
 }

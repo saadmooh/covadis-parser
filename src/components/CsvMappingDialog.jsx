@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react'
 import { EPANET_SCHEMA, getRequiredFields } from '../utils/schemaDictionary.js'
-import { detectTableType, parseCsvText, isMultiSectionCsv, parseMultiSectionCsv } from '../utils/csvAutoDetector.js'
+import { detectTableType, parseCsvText, isMultiSectionCsv, parseMultiSectionCsv, suggestMappingsForType } from '../utils/csvAutoDetector.js'
 
 const STYLE = {
   overlay: {
@@ -18,7 +18,7 @@ const STYLE = {
   },
   body: { flex: 1, overflowY: 'auto', padding: 20 },
   footer: {
-    padding: '14px 24px', borderTop: '1px solid #e0e0e0', background: '#f7f8fa',
+    padding: '14px 24px', borderTop: '1px solid #e0e0e0', background: '#f7f9fa',
     display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center',
   },
   confidence: (score) => {
@@ -42,6 +42,15 @@ const STYLE = {
     background: variant === 'primary' ? '#28a745' : variant === 'danger' ? '#dc3545' : '#6c757d',
     color: '#fff',
   }),
+  chip: (active, isAuto) => ({
+    padding: '8px 16px', border: '2px solid', borderRadius: 20, cursor: 'pointer',
+    fontSize: 13, fontWeight: active ? 700 : 500, transition: 'all 0.15s',
+    background: active ? '#2c7bb6' : '#fff',
+    color: active ? '#fff' : '#495057',
+    borderColor: active ? '#2c7bb6' : isAuto ? '#28a745' : '#dee2e6',
+    display: 'inline-flex', alignItems: 'center', gap: 6,
+    whiteSpace: 'nowrap',
+  }),
   sectionRow: (expanded) => ({
     display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
     borderRadius: 6, cursor: 'pointer', fontSize: 13,
@@ -49,16 +58,36 @@ const STYLE = {
     border: `1px solid ${expanded ? '#b3d7f2' : '#e9ecef'}`,
     marginBottom: 4, transition: 'all 0.15s',
   }),
+  notification: {
+    padding: '8px 14px', borderRadius: 6, fontSize: 12, marginBottom: 12,
+    background: '#d1ecf1', color: '#0c5460', border: '1px solid #bee5eb',
+    display: 'flex', alignItems: 'center', gap: 6,
+  },
 }
 
-const DETECTABLE_SECTIONS = Object.keys(EPANET_SCHEMA).filter(k =>
-  EPANET_SCHEMA[k].synonyms && Object.keys(EPANET_SCHEMA[k].synonyms).length > 0
-)
+const ELEMENT_TYPES = [
+  'JUNCTIONS', 'RESERVOIRS', 'TANKS', 'PIPES', 'PUMPS', 'VALVES',
+  'PATTERNS', 'CURVES', 'COORDINATES', 'STATUS', 'TAGS', 'LABELS', 'CONTROLS',
+]
+
+const TYPE_LABELS = {
+  JUNCTIONS: 'Junctions (Nodes)', RESERVOIRS: 'Reservoirs', TANKS: 'Tanks',
+  PIPES: 'Pipes', PUMPS: 'Pumps', VALVES: 'Valves',
+  PATTERNS: 'Patterns', CURVES: 'Curves', COORDINATES: 'Coordinates',
+  STATUS: 'Status', TAGS: 'Tags', LABELS: 'Labels', CONTROLS: 'Controls',
+}
+
+const SIMPLE_FIELDS = {
+  COORDINATES: ['id', 'x', 'y'],
+  STATUS: ['id', 'status'],
+  TAGS: ['objectType', 'id', 'tag'],
+}
 
 export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
   const [fieldMappings, setFieldMappings] = useState({})
   const [showPreview, setShowPreview] = useState(true)
   const [expandedSection, setExpandedSection] = useState(null)
+  const [notification, setNotification] = useState(null)
 
   const parsed = useMemo(() => {
     if (!rawCsv) return null
@@ -82,28 +111,44 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
 
   const detectedType = detection?.detectedType || null
   const confidence = detection?.confidence || 0
-  const ambiguous = detection?.ambiguous || false
-  const alternatives = detection?.alternatives || []
+  const isHighConfidence = confidence >= 0.85
 
-  const [manualType, setManualType] = useState(null)
-  const currentType = manualType || detectedType
+  const [selectedType, setSelectedType] = useState(null)
+  const currentType = selectedType || (isHighConfidence ? detectedType : null)
 
-  const initialMappings = useMemo(() => {
-    if (!detection) return {}
-    const m = {}
-    for (const fm of detection.fieldMappings) {
-      const key = `${detection.detectedType || 'JUNCTIONS'}__${fm.header}`
-      if (fm.suggestedField) {
-        m[key] = { field: fm.suggestedField, section: fm.suggestedSection, score: fm.score, ignored: false }
+  const autoSuggestions = useMemo(() => {
+    if (!parsed || !currentType) return {}
+    const suggestions = suggestMappingsForType(parsed.headers, parsed.rows, currentType)
+    const map = {}
+    for (const s of suggestions) {
+      if (s.field && s.score >= 0.4) {
+        map[s.header] = { field: s.field, section: currentType, score: s.score, ignored: false, auto: true }
       }
     }
-    return m
-  }, [detection])
+    return map
+  }, [parsed, currentType])
 
   const mergedMappings = useMemo(() => {
-    if (Object.keys(fieldMappings).length === 0) return initialMappings
-    return { ...initialMappings, ...fieldMappings }
-  }, [initialMappings, fieldMappings])
+    const preserved = {}
+    for (const [key, val] of Object.entries(fieldMappings)) {
+      if (!val.auto || !autoSuggestions[key.split('__')[1]]) {
+        preserved[key] = val
+      }
+    }
+    const result = {}
+    for (const [header, suggestion] of Object.entries(autoSuggestions)) {
+      const manualKey = `${currentType}__${header}`
+      if (preserved[manualKey]) {
+        result[manualKey] = { ...preserved[manualKey], auto: false }
+      } else {
+        result[manualKey] = suggestion
+      }
+    }
+    for (const [key, val] of Object.entries(preserved)) {
+      if (!result[key]) result[key] = val
+    }
+    return result
+  }, [autoSuggestions, fieldMappings, currentType])
 
   const allFieldOptions = useMemo(() => {
     if (!currentType) return {}
@@ -125,28 +170,31 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
 
   const allRequiredMet = requiredFields.length === 0 || mappedRequiredCount >= requiredFields.length
 
+  const handleTypeChange = useCallback((newType) => {
+    setSelectedType(newType)
+    setFieldMappings({})
+    setNotification(newType ? `تم تحديث الاقتراحات بناءً على النوع الجديد (${TYPE_LABELS[newType] || newType})` : null)
+    setTimeout(() => setNotification(null), 3000)
+  }, [])
+
   const handleMappingChange = useCallback((header, field, section) => {
     setFieldMappings(prev => ({
       ...prev,
-      [`${section}__${header}`]: { field, section, score: 0, ignored: false },
+      [`${section}__${header}`]: { field, section, score: 0, ignored: false, auto: false },
     }))
   }, [])
 
   const handleIgnore = useCallback((header, section) => {
     setFieldMappings(prev => {
       const key = `${section}__${header}`
-      const existing = prev[key]
-      if (existing) return { ...prev, [key]: { ...existing, ignored: true } }
-      return prev
+      return { ...prev, [key]: { ...(prev[key] || {}), field: null, ignored: true, auto: false } }
     })
   }, [])
 
   const handleUnignore = useCallback((header, section) => {
     setFieldMappings(prev => {
       const key = `${section}__${header}`
-      const existing = prev[key]
-      if (existing) return { ...prev, [key]: { ...existing, ignored: false } }
-      return prev
+      return { ...prev, [key]: { ...(prev[key] || {}), ignored: false, auto: false } }
     })
   }, [])
 
@@ -165,11 +213,6 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
     }
     onConfirm({ mapping: result, detectedType: currentType, isMulti: false })
   }, [mergedMappings, currentType, onConfirm, isMulti, multiData])
-
-  const handleTypeChange = useCallback((newType) => {
-    setManualType(newType)
-    setFieldMappings({})
-  }, [])
 
   const previewRows = useMemo(() => {
     if (!parsed) return []
@@ -192,6 +235,41 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
   const getMatchedField = (header) => {
     if (!currentType) return null
     return mergedMappings[`${currentType}__${header}`] || null
+  }
+
+  const isSpecialType = (type) => ['CONTROLS', 'LABELS'].includes(type)
+  const isSimpleType = (type) => !!SIMPLE_FIELDS[type]
+
+  const renderSpecialUI = () => {
+    if (currentType === 'CONTROLS') {
+      return (
+        <div style={{ padding: 16, background: '#f8f9fa', borderRadius: 6, border: '1px solid #e9ecef' }}>
+          <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>قواعد التحكم (CONTROLS)</h4>
+          <p style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
+            هذا القسم يحتوي نصوص تحكم كاملة، لا يمكن تفكيكها بأعمدة. كل صف يمثل حكماً واحداً.
+          </p>
+          {parsed?.rows.slice(0, 5).map((row, i) => {
+            const vals = Object.values(row).filter(v => v && v !== ';').join(',').trim()
+            return vals ? <div key={i} style={{ padding: '4px 8px', fontSize: 12, background: '#fff', borderRadius: 4, marginBottom: 4, border: '1px solid #dee2e6', fontFamily: 'monospace' }}>{vals}</div> : null
+          })}
+        </div>
+      )
+    }
+    if (currentType === 'LABELS') {
+      return (
+        <div style={{ padding: 16, background: '#f8f9fa', borderRadius: 6, border: '1px solid #e9ecef' }}>
+          <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>تسميات نصية (LABELS)</h4>
+          <p style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
+            كل تسمية: X, Y, "النص", معرّف_مرجعي (اختياري). تُدمج تلقائياً مع العناصر.
+          </p>
+          {parsed?.rows.slice(0, 5).map((row, i) => {
+            const vals = Object.values(row).slice(1).join(' ').trim()
+            return vals ? <div key={i} style={{ padding: '4px 8px', fontSize: 12, background: '#fff', borderRadius: 4, marginBottom: 4, border: '1px solid #dee2e6' }}>{vals}</div> : null
+          })}
+        </div>
+      )
+    }
+    return null
   }
 
   if (isMulti && multiData) {
@@ -220,26 +298,21 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
             )}
             {expandedSection === 'JUNCTIONS' && (
               <div style={{ padding: '8px 12px 12px', background: '#f8fffe', borderRadius: 6, marginBottom: 4, border: '1px solid #d4edda' }}>
-                <div style={{ fontSize: 12, color: '#555', marginBottom: 8 }}>
-                  الحقول: ID, Elevation, Demand, Pattern (حسب الترتيب الموضعي)
-                </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={STYLE.previewTable}>
                     <thead>
                       <tr>
-                        <th style={STYLE.previewTh}>ID</th>
-                        <th style={STYLE.previewTh}>Elevation</th>
-                        <th style={STYLE.previewTh}>Demand</th>
-                        <th style={STYLE.previewTh}>Pattern</th>
+                        {Object.keys(multiData.junctions[0] || {}).map(k => (
+                          <th key={k} style={STYLE.previewTh}>{k}</th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
                       {multiData.junctions.slice(0, 5).map((j, i) => (
                         <tr key={i}>
-                          <td style={STYLE.previewTd}>{j.id}</td>
-                          <td style={STYLE.previewTd}>{j.elevation}</td>
-                          <td style={STYLE.previewTd}>{j.demand}</td>
-                          <td style={STYLE.previewTd}>{j.pattern}</td>
+                          {Object.values(j).map((v, vi) => (
+                            <td key={vi} style={STYLE.previewTd}>{String(v)}</td>
+                          ))}
                         </tr>
                       ))}
                     </tbody>
@@ -260,30 +333,21 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
             )}
             {expandedSection === 'PIPES' && (
               <div style={{ padding: '8px 12px 12px', background: '#f8fffe', borderRadius: 6, marginBottom: 4, border: '1px solid #d4edda' }}>
-                <div style={{ fontSize: 12, color: '#555', marginBottom: 8 }}>
-                  الحقول: ID, Node1, Node2, Length, Diameter, Roughness, MinorLoss, Status
-                </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={STYLE.previewTable}>
                     <thead>
                       <tr>
-                        <th style={STYLE.previewTh}>ID</th>
-                        <th style={STYLE.previewTh}>Node1</th>
-                        <th style={STYLE.previewTh}>Node2</th>
-                        <th style={STYLE.previewTh}>Length</th>
-                        <th style={STYLE.previewTh}>Diameter</th>
-                        <th style={STYLE.previewTh}>Status</th>
+                        {Object.keys(multiData.pipes[0] || {}).map(k => (
+                          <th key={k} style={STYLE.previewTh}>{k}</th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
                       {multiData.pipes.slice(0, 5).map((p, i) => (
                         <tr key={i}>
-                          <td style={STYLE.previewTd}>{p.id}</td>
-                          <td style={STYLE.previewTd}>{p.node1}</td>
-                          <td style={STYLE.previewTd}>{p.node2}</td>
-                          <td style={STYLE.previewTd}>{p.length}</td>
-                          <td style={STYLE.previewTd}>{p.diameter}</td>
-                          <td style={STYLE.previewTd}>{p.status}</td>
+                          {Object.values(p).map((v, vi) => (
+                            <td key={vi} style={STYLE.previewTd}>{String(v)}</td>
+                          ))}
                         </tr>
                       ))}
                     </tbody>
@@ -310,20 +374,10 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
                     <div style={{ padding: '8px 12px 12px', background: '#f8fffe', borderRadius: 6, marginBottom: 4, border: '1px solid #d4edda' }}>
                       <div style={{ overflowX: 'auto' }}>
                         <table style={STYLE.previewTable}>
-                          <thead>
-                            <tr>
-                              {Object.keys(items[0] || {}).map(k => (
-                                <th key={k} style={STYLE.previewTh}>{k}</th>
-                              ))}
-                            </tr>
-                          </thead>
+                          <thead><tr>{Object.keys(items[0] || {}).map(k => <th key={k} style={STYLE.previewTh}>{k}</th>)}</tr></thead>
                           <tbody>
                             {items.slice(0, 5).map((item, i) => (
-                              <tr key={i}>
-                                {Object.values(item).map((v, j) => (
-                                  <td key={j} style={STYLE.previewTd}>{String(v)}</td>
-                                ))}
-                              </tr>
+                              <tr key={i}>{Object.values(item).map((v, vi) => <td key={vi} style={STYLE.previewTd}>{String(v)}</td>)}</tr>
                             ))}
                           </tbody>
                         </table>
@@ -348,13 +402,10 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
               <div style={{ padding: '8px 12px 12px', background: '#f8fffe', borderRadius: 6, marginBottom: 4, border: '1px solid #d4edda' }}>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={STYLE.previewTable}>
-                    <thead><tr><th style={STYLE.previewTh}>ID</th><th style={STYLE.previewTh}>Factors (أول 6)</th></tr></thead>
+                    <thead><tr><th style={STYLE.previewTh}>ID</th><th style={STYLE.previewTh}>Factors</th></tr></thead>
                     <tbody>
                       {multiData.patterns.slice(0, 5).map((p, i) => (
-                        <tr key={i}>
-                          <td style={STYLE.previewTd}>{p.id}</td>
-                          <td style={STYLE.previewTd}>{(p.factors || []).slice(0, 6).join(', ')}...</td>
-                        </tr>
+                        <tr key={i}><td style={STYLE.previewTd}>{p.id}</td><td style={STYLE.previewTd}>{(p.factors || []).slice(0, 6).join(', ')}...</td></tr>
                       ))}
                     </tbody>
                   </table>
@@ -379,11 +430,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
                     <thead><tr><th style={STYLE.previewTh}>ID</th><th style={STYLE.previewTh}>X</th><th style={STYLE.previewTh}>Y</th></tr></thead>
                     <tbody>
                       {multiData.curves.slice(0, 8).map((c, i) => (
-                        <tr key={i}>
-                          <td style={STYLE.previewTd}>{c.id}</td>
-                          <td style={STYLE.previewTd}>{c.x}</td>
-                          <td style={STYLE.previewTd}>{c.y}</td>
-                        </tr>
+                        <tr key={i}><td style={STYLE.previewTd}>{c.id}</td><td style={STYLE.previewTd}>{c.x}</td><td style={STYLE.previewTd}>{c.y}</td></tr>
                       ))}
                     </tbody>
                   </table>
@@ -395,7 +442,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
               <div style={STYLE.sectionRow(false)}>
                 <span>📎</span>
                 <span style={{ fontWeight: 600 }}>COORDINATES</span>
-                <span style={{ color: '#6c757d' }}>({multiData.coordinates.length} صف — ملحق تصنيفي، سيُدمج تلقائياً)</span>
+                <span style={{ color: '#6c757d' }}>({multiData.coordinates.length} صف — ملحق تصنيفي)</span>
                 {confidenceBadge(0.99)}
               </div>
             )}
@@ -404,7 +451,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
               <div style={STYLE.sectionRow(false)}>
                 <span>📎</span>
                 <span style={{ fontWeight: 600 }}>TAGS</span>
-                <span style={{ color: '#6c757d' }}>({multiData.tags.length} صف — ملحق تصنيفي، سيُدمج تلقائياً)</span>
+                <span style={{ color: '#6c757d' }}>({multiData.tags.length} صف — ملحق تصنيفي)</span>
                 {confidenceBadge(0.95)}
               </div>
             )}
@@ -422,7 +469,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
               <div style={STYLE.sectionRow(expandedSection === 'OPTIONS')} onClick={() => setExpandedSection(expandedSection === 'OPTIONS' ? null : 'OPTIONS')}>
                 <span>{expandedSection === 'OPTIONS' ? '▼' : '▶'}</span>
                 <span style={{ fontWeight: 600 }}>⚙️ إعدادات عامة</span>
-                <span style={{ color: '#6c757d' }}>(OPTIONS/TIMES — قيم افتراضية قابلة للمراجعة)</span>
+                <span style={{ color: '#6c757d' }}>(OPTIONS/TIMES)</span>
               </div>
             )}
             {expandedSection === 'OPTIONS' && (
@@ -432,10 +479,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
                     <thead><tr><th style={STYLE.previewTh}>المفتاح</th><th style={STYLE.previewTh}>القيمة</th></tr></thead>
                     <tbody>
                       {Object.entries({ ...multiData.options, ...multiData.times }).map(([k, v], i) => (
-                        <tr key={i}>
-                          <td style={STYLE.previewTd}>{k}</td>
-                          <td style={STYLE.previewTd}>{v}</td>
-                        </tr>
+                        <tr key={i}><td style={STYLE.previewTd}>{k}</td><td style={STYLE.previewTd}>{v}</td></tr>
                       ))}
                     </tbody>
                   </table>
@@ -489,195 +533,197 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel }) {
               {parsed ? `${parsed.rows.length} صف | ${parsed.headers.length} عمود` : ''}
             </p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {detectedType && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 12, color: '#555' }}>النوع المكتشف:</span>
-                <select
-                  value={currentType || ''}
-                  onChange={(e) => handleTypeChange(e.target.value)}
-                  style={{ padding: '4px 8px', fontSize: 13, borderRadius: 4, border: '1px solid #ccc' }}
-                >
-                  {DETECTABLE_SECTIONS.map(k => (
-                    <option key={k} value={k}>{EPANET_SCHEMA[k].section}</option>
-                  ))}
-                </select>
-                {confidenceBadge(confidence)}
-              </div>
-            )}
-            {ambiguous && (
-              <span style={{ fontSize: 11, color: '#856404', background: '#fff3cd', padding: '2px 8px', borderRadius: 4 }}>
-                غامض - يرجى التحقق
-              </span>
-            )}
-          </div>
         </div>
 
         <div style={STYLE.body}>
-          {alternatives.length > 1 && (
-            <div style={{ marginBottom: 16, padding: 10, background: '#f8f9fa', borderRadius: 6, fontSize: 12 }}>
-              <strong>البدائل المحتملة:</strong>
-              <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-                {alternatives.slice(0, 5).map((alt, i) => (
-                  <button
-                    key={i}
-                    onClick={() => handleTypeChange(alt.section)}
-                    style={{
-                      padding: '6px 12px', border: 'none', borderRadius: 6, cursor: 'pointer',
-                      fontSize: 12, fontWeight: currentType === alt.section ? 600 : 400,
-                      background: currentType === alt.section ? '#2c7bb6' : '#e9ecef',
-                      color: currentType === alt.section ? '#fff' : '#495057',
-                      display: 'flex', alignItems: 'center', gap: 4,
-                    }}
-                  >
-                    {EPANET_SCHEMA[alt.section]?.section || alt.section}
-                    {confidenceBadge(alt.score)}
-                  </button>
-                ))}
-              </div>
+          <div style={{ marginBottom: 16, padding: '12px 16px', background: '#f0f4f8', borderRadius: 8, border: '1px solid #d0d7de' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#333' }}>
+              نوع العنصر {!currentType && <span style={{ color: '#dc3545', fontWeight: 400 }}>* الرجاء الاختيار</span>}
+              {isHighConfidence && !selectedType && (
+                <span style={{ fontSize: 11, color: '#28a745', fontWeight: 400, marginRight: 8 }}>🔍 مكتشف تلقائياً بثقة {(confidence * 100).toFixed(0)}%</span>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {ELEMENT_TYPES.map(type => (
+                <button
+                  key={type}
+                  onClick={() => handleTypeChange(type)}
+                  style={STYLE.chip(currentType === type, isHighConfidence && detectedType === type && !selectedType)}
+                >
+                  {TYPE_LABELS[type]}
+                  {isHighConfidence && detectedType === type && !selectedType && (
+                    <span style={{ fontSize: 10, opacity: 0.8 }}>auto</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {notification && (
+            <div style={STYLE.notification}>ℹ️ {notification}</div>
+          )}
+
+          {!currentType && (
+            <div style={{ padding: 20, textAlign: 'center', color: '#856404', background: '#fff3cd', borderRadius: 6, fontSize: 13 }}>
+              لم نتمكن من تحديد نوع البيانات بثقة كافية — الرجاء اختيار نوع العنصر أعلاه
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: showPreview ? '1fr 1fr' : '1fr', gap: 20 }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                <h4 style={{ margin: 0, fontSize: 14, color: '#333' }}>
-                  تعيين الأعمدة — {currentType ? EPANET_SCHEMA[currentType]?.section : ''}
-                </h4>
-                <button
-                  onClick={() => setShowPreview(!showPreview)}
-                  style={{ fontSize: 11, color: '#2c7bb6', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
-                >
-                  {showPreview ? 'إخفاء المعاينة' : 'إظهار المعاينة'}
-                </button>
-              </div>
+          {currentType && isSpecialType(currentType) && renderSpecialUI()}
 
-              {requiredFields.length > 0 && (
-                <div style={{
-                  padding: '6px 10px', borderRadius: 4, fontSize: 12, marginBottom: 8,
-                  background: allRequiredMet ? '#d4edda' : '#f8d7da',
-                  color: allRequiredMet ? '#155724' : '#721c24',
-                  border: `1px solid ${allRequiredMet ? '#c3e6cb' : '#f5c6cb'}`,
-                }}>
-                  الحقول الإلزامية: {mappedRequiredCount}/{requiredFields.length}
-                  {!allRequiredMet && (
-                    <span> — الناقصة: {requiredFields.filter(f => !Object.values(mergedMappings).some(m => m.field === f && !m.ignored && m.section === currentType)).join(', ')}</span>
+          {currentType && !isSpecialType(currentType) && (
+            <div style={{ display: 'grid', gridTemplateColumns: showPreview && !isSimpleType(currentType) ? '1fr 1fr' : '1fr', gap: 20 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <h4 style={{ margin: 0, fontSize: 14, color: '#333' }}>
+                    تعيين الأعمدة — {TYPE_LABELS[currentType]}
+                  </h4>
+                  {!isSimpleType(currentType) && (
+                    <button
+                      onClick={() => setShowPreview(!showPreview)}
+                      style={{ fontSize: 11, color: '#2c7bb6', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                    >
+                      {showPreview ? 'إخفاء المعاينة' : 'إظهار المعاينة'}
+                    </button>
                   )}
                 </div>
-              )}
 
-              <table style={STYLE.table}>
-                <thead>
-                  <tr>
-                    <th style={STYLE.th}>عمود CSV</th>
-                    <th style={STYLE.th}>الحقل المكتشف</th>
-                    <th style={STYLE.th}>الثقة</th>
-                    <th style={STYLE.th}>التعيين اليدوي</th>
-                    <th style={STYLE.th}>إجراءات</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {parsed?.headers.map((header) => {
-                    const match = getMatchedField(header)
-                    const isIgnored = match?.ignored
-                    const isRequired = requiredFields.includes(match?.field)
-                    const rowStyle = isIgnored ? { opacity: 0.4 } : isRequired ? { background: '#f0fff4' } : {}
+                {isSimpleType(currentType) && (
+                  <div style={{ fontSize: 12, color: '#6c757d', marginBottom: 8, padding: '6px 10px', background: '#e8f4fd', borderRadius: 4 }}>
+                    ملحق تصنيفي — يُدمج مع العناصر الموجودة مسبقاً via ID
+                  </div>
+                )}
 
-                    return (
-                      <tr key={header} style={rowStyle}>
-                        <td style={STYLE.td}>
-                          <code style={{ fontSize: 12, background: '#f0f0f0', padding: '2px 6px', borderRadius: 3 }}>{header}</code>
-                        </td>
-                        <td style={STYLE.td}>
-                          {match?.field && !isIgnored ? (
-                            <span style={{ fontWeight: 600, fontSize: 13 }}>{match.field}</span>
-                          ) : (
-                            <span style={{ color: '#999', fontSize: 12 }}>{isIgnored ? 'تجاهل' : '—'}</span>
-                          )}
-                        </td>
-                        <td style={STYLE.td}>
-                          {match && !isIgnored ? confidenceBadge(match.score) : null}
-                        </td>
-                        <td style={STYLE.td}>
-                          <select
-                            value={match?.field || ''}
-                            onChange={(e) => {
-                              if (e.target.value) {
-                                handleMappingChange(header, e.target.value, currentType)
-                              } else {
-                                handleIgnore(header, currentType)
-                              }
-                            }}
-                            style={STYLE.select}
-                          >
-                            <option value="">-- اختر --</option>
-                            {Object.entries(allFieldOptions).map(([field]) => (
-                              <option key={field} value={field}>{field}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td style={STYLE.td}>
-                          {isIgnored ? (
-                            <button onClick={() => handleUnignore(header, currentType)} style={{ fontSize: 11, color: '#2c7bb6', background: 'none', border: 'none', cursor: 'pointer' }}>
-                              استعادة
-                            </button>
-                          ) : match?.field ? (
-                            <button onClick={() => handleIgnore(header, currentType)} style={{ fontSize: 11, color: '#dc3545', background: 'none', border: 'none', cursor: 'pointer' }}>
-                              تجاهل
-                            </button>
-                          ) : null}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                {requiredFields.length > 0 && (
+                  <div style={{
+                    padding: '6px 10px', borderRadius: 4, fontSize: 12, marginBottom: 8,
+                    background: allRequiredMet ? '#d4edda' : '#f8d7da',
+                    color: allRequiredMet ? '#155724' : '#721c24',
+                    border: `1px solid ${allRequiredMet ? '#c3e6cb' : '#f5c6cb'}`,
+                  }}>
+                    الحقول الإلزامية: {mappedRequiredCount}/{requiredFields.length}
+                    {!allRequiredMet && (
+                      <span> — الناقصة: {requiredFields.filter(f => !Object.values(mergedMappings).some(m => m.field === f && !m.ignored && m.section === currentType)).join(', ')}</span>
+                    )}
+                  </div>
+                )}
 
-            {showPreview && (
-              <div>
-                <h4 style={{ margin: '0 0 12px', fontSize: 14, color: '#333' }}>معاينة البيانات</h4>
-                <div style={{ overflowX: 'auto', border: '1px solid #e0e0e0', borderRadius: 6 }}>
-                  <table style={STYLE.previewTable}>
-                    <thead>
-                      <tr>
-                        <th style={STYLE.previewTh}>#</th>
-                        {parsed?.headers.map(h => {
-                          const m = getMatchedField(h)
-                          const bg = m && !m.ignored
-                            ? (m.score >= 0.7 ? '#d4edda' : m.score >= 0.5 ? '#fff3cd' : '#f8d7da')
-                            : '#f8f9fa'
-                          return <th key={h} style={{ ...STYLE.previewTh, background: bg }}>{h}</th>
-                        })}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {previewRows.map((row, i) => (
-                        <tr key={i}>
-                          <td style={{ ...STYLE.previewTd, fontWeight: 600, color: '#999' }}>{i + 1}</td>
-                          {parsed?.headers.map(h => (
-                            <td key={h} style={STYLE.previewTd}>{row[h] || ''}</td>
-                          ))}
+                <table style={STYLE.table}>
+                  <thead>
+                    <tr>
+                      <th style={STYLE.th}>عمود CSV</th>
+                      <th style={STYLE.th}>الحقل المكتشف</th>
+                      <th style={STYLE.th}>الثقة</th>
+                      <th style={STYLE.th}>التعيين اليدوي</th>
+                      <th style={STYLE.th}>إجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parsed?.headers.map((header) => {
+                      const match = getMatchedField(header)
+                      const isIgnored = match?.ignored
+                      const isRequired = requiredFields.includes(match?.field)
+                      const rowStyle = isIgnored ? { opacity: 0.4 } : isRequired ? { background: '#f0fff4' } : {}
+
+                      return (
+                        <tr key={header} style={rowStyle}>
+                          <td style={STYLE.td}>
+                            <code style={{ fontSize: 12, background: '#f0f0f0', padding: '2px 6px', borderRadius: 3 }}>{header}</code>
+                          </td>
+                          <td style={STYLE.td}>
+                            {match?.field && !isIgnored ? (
+                              <span style={{ fontWeight: 600, fontSize: 13 }}>{match.field}</span>
+                            ) : (
+                              <span style={{ color: '#999', fontSize: 12 }}>{isIgnored ? 'تجاهل' : '—'}</span>
+                            )}
+                          </td>
+                          <td style={STYLE.td}>
+                            {match && !isIgnored ? confidenceBadge(match.score) : null}
+                          </td>
+                          <td style={STYLE.td}>
+                            <select
+                              value={match?.field || ''}
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  handleMappingChange(header, e.target.value, currentType)
+                                } else {
+                                  handleIgnore(header, currentType)
+                                }
+                              }}
+                              style={STYLE.select}
+                            >
+                              <option value="">-- اختر --</option>
+                              {Object.entries(allFieldOptions).map(([field]) => (
+                                <option key={field} value={field}>{field}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td style={STYLE.td}>
+                            {isIgnored ? (
+                              <button onClick={() => handleUnignore(header, currentType)} style={{ fontSize: 11, color: '#2c7bb6', background: 'none', border: 'none', cursor: 'pointer' }}>
+                                استعادة
+                              </button>
+                            ) : match?.field ? (
+                              <button onClick={() => handleIgnore(header, currentType)} style={{ fontSize: 11, color: '#dc3545', background: 'none', border: 'none', cursor: 'pointer' }}>
+                                تجاهل
+                              </button>
+                            ) : null}
+                          </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
-            )}
-          </div>
+
+              {showPreview && !isSimpleType(currentType) && (
+                <div>
+                  <h4 style={{ margin: '0 0 12px', fontSize: 14, color: '#333' }}>معاينة البيانات</h4>
+                  <div style={{ overflowX: 'auto', border: '1px solid #e0e0e0', borderRadius: 6 }}>
+                    <table style={STYLE.previewTable}>
+                      <thead>
+                        <tr>
+                          <th style={STYLE.previewTh}>#</th>
+                          {parsed?.headers.map(h => {
+                            const m = getMatchedField(h)
+                            const bg = m && !m.ignored
+                              ? (m.score >= 0.7 ? '#d4edda' : m.score >= 0.5 ? '#fff3cd' : '#f8d7da')
+                              : '#f8f9fa'
+                            return <th key={h} style={{ ...STYLE.previewTh, background: bg }}>{h}</th>
+                          })}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {previewRows.map((row, i) => (
+                          <tr key={i}>
+                            <td style={{ ...STYLE.previewTd, fontWeight: 600, color: '#999' }}>{i + 1}</td>
+                            {parsed?.headers.map(h => (
+                              <td key={h} style={STYLE.previewTd}>{row[h] || ''}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div style={STYLE.footer}>
           <button onClick={onCancel} style={STYLE.btn('secondary')}>إلغاء</button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {!allRequiredMet && (
-              <span style={{ fontSize: 11, color: '#856404' }}>يرجى تعيين جميع الحقول الإلزامية أولاً</span>
+            {!currentType && (
+              <span style={{ fontSize: 11, color: '#dc3545' }}>اختر نوع العنصر أولاً</span>
+            )}
+            {currentType && !allRequiredMet && !isSpecialType(currentType) && (
+              <span style={{ fontSize: 11, color: '#856404' }}>يرجى تعيين جميع الحقول الإلزامية</span>
             )}
             <button
               onClick={handleConfirm}
-              disabled={!allRequiredMet}
-              style={{ ...STYLE.btn('primary'), opacity: allRequiredMet ? 1 : 0.5, cursor: allRequiredMet ? 'pointer' : 'not-allowed' }}
+              disabled={!currentType || (!allRequiredMet && !isSpecialType(currentType))}
+              style={{ ...STYLE.btn('primary'), opacity: currentType && (allRequiredMet || isSpecialType(currentType)) ? 1 : 0.5, cursor: currentType ? 'pointer' : 'not-allowed' }}
             >
               تأكيد وتوليد .inp
             </button>

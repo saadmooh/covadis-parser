@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseCsvText, detectTableType, isMultiSectionCsv, parseMultiSectionCsv, isJunkColumn, parseLabelsField, detectDiscriminatorColumn } from '../csvAutoDetector.js'
+import { parseCsvText, detectTableType, isMultiSectionCsv, parseMultiSectionCsv, isJunkColumn, parseLabelsField, detectDiscriminatorColumn, suggestFieldForColumn, suggestMappingsForType } from '../csvAutoDetector.js'
 
 describe('parseCsvText', () => {
   it('parses a standard CSV', () => {
@@ -270,5 +270,61 @@ LABELS,300,400,"Tank" T1,`
     expect(result.labels.length).toBe(2)
     expect(result.labels[0].text).toBe('Source')
     expect(result.labels[0].anchorId).toBe('R1')
+  })
+})
+
+describe('suggestFieldForColumn', () => {
+  it('suggests correct field for pipe data', () => {
+    const rows = [
+      { id: 'P1', from: 'J1', to: 'J2', len: '100', diam: '200', roughn: '140' },
+      { id: 'P2', from: 'J2', to: 'J3', len: '200', diam: '150', roughn: '130' },
+    ]
+    const r1 = suggestFieldForColumn('diam', rows, 'PIPES')
+    expect(r1.field).toBe('diameter')
+    const r2 = suggestFieldForColumn('from', rows, 'PIPES')
+    expect(r2.field).toBe('node1')
+    const r3 = suggestFieldForColumn('roughn', rows, 'PIPES')
+    expect(r3.field).toBe('roughness')
+  })
+
+  it('suggests correct field for junction data', () => {
+    const rows = [
+      { id: 'J1', elev: '100', dem: '1.5', pat: 'DMA1' },
+      { id: 'J2', elev: '200', dem: '0', pat: 'DMA1' },
+    ]
+    const r = suggestFieldForColumn('elev', rows, 'JUNCTIONS')
+    expect(r.field).toBe('elevation')
+  })
+
+  it('returns null for unrecognized columns', () => {
+    const rows = [{ xyzabc: 'bar' }]
+    const r = suggestFieldForColumn('xyzabc', rows, 'PIPES')
+    expect(r.field).toBeNull()
+  })
+})
+
+describe('suggestMappingsForType', () => {
+  it('returns suggestions for all headers', () => {
+    const headers = ['id', 'from', 'to', 'len', 'diam']
+    const rows = [
+      { id: 'P1', from: 'J1', to: 'J2', len: '100', diam: '200' },
+    ]
+    const result = suggestMappingsForType(headers, rows, 'PIPES')
+    expect(result.length).toBe(5)
+    const idSuggestion = result.find(r => r.header === 'id')
+    expect(idSuggestion.field).toBe('id')
+    const diamSuggestion = result.find(r => r.header === 'diam')
+    expect(diamSuggestion.field).toBe('diameter')
+  })
+
+  it('handles type switch correctly', () => {
+    const headers = ['id', 'from', 'to', 'pipe_length', 'diam']
+    const rows = [
+      { id: 'P1', from: 'J1', to: 'J2', pipe_length: '100', diam: '200' },
+    ]
+    const pipes = suggestMappingsForType(headers, rows, 'PIPES')
+    const valves = suggestMappingsForType(headers, rows, 'VALVES')
+    expect(pipes.find(r => r.header === 'pipe_length')?.field).toBe('length')
+    expect(valves.find(r => r.header === 'pipe_length')?.field).toBeNull()
   })
 })
