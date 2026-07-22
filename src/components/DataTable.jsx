@@ -146,7 +146,7 @@ export default function DataTable({ data, geoJSON, format, onEditAepPipe, onEdit
               </tr>
             </thead>
             <tbody>
-              {data.pipes.map((p, i) => (
+              {(data.pipes || []).map((p, i) => (
                 <tr key={i}>
                   <td>{i + 1}</td>
                   <td><span className="diam-badge">{p.diam}</span></td>
@@ -353,7 +353,7 @@ export default function DataTable({ data, geoJSON, format, onEditAepPipe, onEdit
               </tr>
             </thead>
             <tbody>
-              {data.assaiNodes.map((n, i) => (
+              {(data.assaiNodes || []).map((n, i) => (
                 <tr key={i}>
                   <td>{i + 1}</td>
                   <td>{n.x.toFixed(2)}</td>
@@ -379,7 +379,7 @@ export default function DataTable({ data, geoJSON, format, onEditAepPipe, onEdit
               </tr>
             </thead>
             <tbody>
-              {data.assaiLines.map((l, i) => (
+              {(data.assaiLines || []).map((l, i) => (
                 <tr key={i}>
                   <td>{i + 1}</td>
                   <td>{l.layer}</td>
@@ -408,7 +408,7 @@ export default function DataTable({ data, geoJSON, format, onEditAepPipe, onEdit
               </tr>
             </thead>
             <tbody>
-              {data.reseauProjete.map((r, i) => {
+              {(data.reseauProjete || []).map((r, i) => {
                 const xs = r.vertices.map(v => v.x), ys = r.vertices.map(v => v.y)
                 return (
                   <tr key={i}>
@@ -430,7 +430,7 @@ export default function DataTable({ data, geoJSON, format, onEditAepPipe, onEdit
           <div>
             <div className="bulk-edit-bar" style={{padding: '8px 0', marginBottom: 8}}>
               <span style={{fontSize: '0.9rem', color: '#555'}}>Modification groupée DN: </span>
-              {Array.from(new Set(data.aepPipes.map(p => p.diam))).filter(d => d).sort((a,b) => a-b).map(d => (
+              {Array.from(new Set((data.aepPipes || []).map(p => p.diam))).filter(d => d).sort((a,b) => a-b).map(d => (
                 <select key={d} defaultValue={d} onChange={e => onBulkEditAepPipes?.(d, Number(e.target.value))} style={{marginRight: 4}}>
                   {DIAM_OPTIONS.map(opt => <option key={opt} value={opt}>DN{opt}</option>)}
                 </select>
@@ -450,7 +450,7 @@ export default function DataTable({ data, geoJSON, format, onEditAepPipe, onEdit
                 </tr>
               </thead>
               <tbody>
-                {data.aepPipes.map((ap, i) => {
+                {(data.aepPipes || []).map((ap, i) => {
                   const xs = ap.vertices.map(v => v.x), ys = ap.vertices.map(v => v.y)
                   return (
                     <tr key={i}>
@@ -485,7 +485,7 @@ export default function DataTable({ data, geoJSON, format, onEditAepPipe, onEdit
               </tr>
             </thead>
             <tbody>
-              {data.aepNodes.map((n, i) => (
+              {(data.aepNodes || []).map((n, i) => (
                 <tr key={i}>
                   <td>{i + 1}</td>
                   <td>{n.x.toFixed(2)}</td>
@@ -507,7 +507,7 @@ export default function DataTable({ data, geoJSON, format, onEditAepPipe, onEdit
               </tr>
             </thead>
             <tbody>
-              {data.aepSplines.map((s, i) => (
+              {(data.aepSplines || []).map((s, i) => (
                 <tr key={i}>
                   <td>{i + 1}</td>
                   <td>{s.controlPoints.length}</td>
@@ -530,7 +530,7 @@ export default function DataTable({ data, geoJSON, format, onEditAepPipe, onEdit
               </tr>
             </thead>
             <tbody>
-              {data.incendieNodes.map((n, i) => (
+              {(data.incendieNodes || []).map((n, i) => (
                 <tr key={i}>
                   <td>{n.id}</td>
                   <td>Nœud</td>
@@ -539,7 +539,7 @@ export default function DataTable({ data, geoJSON, format, onEditAepPipe, onEdit
                   <td>{n.block}</td>
                 </tr>
               ))}
-              {data.incendiePipes.map((p, i) => {
+              {(data.incendiePipes || []).map((p, i) => {
                 const xs = p.vertices.map(v => v.x), ys = p.vertices.map(v => v.y)
                 let len = 0
                 for (let j = 1; j < p.vertices.length; j++) len += Math.sqrt((p.vertices[j].x - p.vertices[j-1].x)**2 + (p.vertices[j].y - p.vertices[j-1].y)**2)
@@ -571,7 +571,7 @@ export default function DataTable({ data, geoJSON, format, onEditAepPipe, onEdit
                 </tr>
               </thead>
               <tbody>
-                {data.manholes.map((m, i) => (
+                {(data.manholes || []).map((m, i) => (
                   <tr key={i}>
                     <td><strong>{m.profileId || m.id || 'R?'}</strong></td>
                     <td>{(m.profileGround || m.ct || '-').toFixed ? (m.profileGround || parseFloat(m.ct) || 0).toFixed(2) : (m.profileGround || m.ct || '-')}</td>
@@ -612,8 +612,8 @@ export default function DataTable({ data, geoJSON, format, onEditAepPipe, onEdit
 
         {tab === 'profiles' && (
           <div className="profile-container">
-            {data.profiles.length === 0 && <p className="empty-msg">Aucun profil trouvé dans ce fichier DXF.</p>}
-            {data.profiles.map((prof, pi) => (
+            {(data.profiles || []).length === 0 && <p className="empty-msg">Aucun profil trouvé dans ce fichier DXF.</p>}
+            {(data.profiles || []).map((prof, pi) => (
               <div key={pi} className="profile-card">
                 <div className="profile-card-header">
                   <strong>{prof.title || prof.layer}</strong>

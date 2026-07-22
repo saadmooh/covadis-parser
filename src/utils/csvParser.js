@@ -5,6 +5,7 @@ export function parseCsvToData(text) {
   const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
 
   const data = {
+    pipes: [],
     aepPipes: [],
     dnPipes: [],
     incendiePipes: [],

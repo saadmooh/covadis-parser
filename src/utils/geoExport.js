@@ -69,9 +69,9 @@ function toCovadisGeoJSON(data, crsCode) {
   const features = []
 
   // Labelled pipes matched to plan geometries
-  for (const p of data.pipes) {
+  for (const p of (data.pipes || [])) {
     let matchedGeom = null
-    for (const g of data.planPipes) {
+    for (const g of (data.planPipes || [])) {
       if (g.vertices.length >= 2) {
         const midX = g.vertices.reduce((s, v) => s + v.x, 0) / g.vertices.length
         const midY = g.vertices.reduce((s, v) => s + v.y, 0) / g.vertices.length
@@ -100,7 +100,7 @@ function toCovadisGeoJSON(data, crsCode) {
   }
 
   // DN 200 pipes
-  for (const dnp of data.dnPipes) {
+  for (const dnp of (data.dnPipes || [])) {
     const coords = dnp.vertices.map(v => {
       const ll = toLatLng(v.x, v.y, crsCode)
       return [ll.lng, ll.lat]
@@ -113,7 +113,7 @@ function toCovadisGeoJSON(data, crsCode) {
   }
 
   // Manholes (use profile ID when available)
-  for (const m of data.manholes) {
+  for (const m of (data.manholes || [])) {
     const ll = toLatLng(m.x, m.y, crsCode)
     features.push({
       type: 'Feature',

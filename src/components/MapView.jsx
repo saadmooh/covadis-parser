@@ -109,13 +109,13 @@ function transformFeatures(data, crsCode) {
       },
     })
   }
-  for (const pl of data.planPipes) {
+  for (const pl of (data.planPipes || [])) {
     if (pl.profileIdx >= 0) continue
     if (pl.diam > 0) continue
     const coords = pl.vertices.map(v => { const ll = toLatLng(v.x, v.y, crsCode); return [ll.lng, ll.lat] })
     features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: { type: 'pipe_plan' } })
   }
-  for (const pl of data.planPipes) {
+  for (const pl of (data.planPipes || [])) {
     if (pl.profileIdx >= 0) continue
     if (!pl.diam > 0) continue
     const coords = pl.vertices.map(v => { const ll = toLatLng(v.x, v.y, crsCode); return [ll.lng, ll.lat] })
@@ -124,11 +124,11 @@ function transformFeatures(data, crsCode) {
       properties: { type: 'pipe_label', diam_mm: pl.diam || 0, materiau: pl.material || '', longueur_totale: pl.labelLength || 0, pente: pl.labelSlope || 0 },
     })
   }
-  for (const dnp of data.dnPipes) {
+  for (const dnp of (data.dnPipes || [])) {
     const coords = dnp.vertices.map(v => { const ll = toLatLng(v.x, v.y, crsCode); return [ll.lng, ll.lat] })
     features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: { type: 'pipe_dn', diam_mm: parseInt(dnp.diam) || 0, calque: dnp.layer } })
   }
-  for (const m of data.manholes) {
+  for (const m of (data.manholes || [])) {
     const ll = toLatLng(m.x, m.y, crsCode)
     features.push({
       type: 'Feature', geometry: { type: 'Point', coordinates: [ll.lng, ll.lat] },
@@ -144,11 +144,11 @@ function transformFeatures(data, crsCode) {
     const ll = toLatLng(n.x, n.y, crsCode)
     features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [ll.lng, ll.lat] }, properties: { type: 'new_eu1_noeud', block: n.block, rotation: n.rotation } })
   }
-  for (const n of data.assaiNodes) {
+  for (const n of (data.assaiNodes || [])) {
     const ll = toLatLng(n.x, n.y, crsCode)
     features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [ll.lng, ll.lat] }, properties: { type: 'assai_noeud', rotation: n.rotation } })
   }
-  for (const al of data.assaiLines) {
+  for (const al of (data.assaiLines || [])) {
     const s = toLatLng(al.start.x, al.start.y, crsCode)
     const e = toLatLng(al.end.x, al.end.y, crsCode)
     features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: [[s.lng, s.lat], [e.lng, e.lat]] }, properties: { type: 'assai_tuyau', diam_mm: parseInt(al.diam) || 0, calque: al.layer } })
@@ -173,7 +173,7 @@ function transformFeatures(data, crsCode) {
     const ll = toLatLng(n.x, n.y, crsCode)
     features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [ll.lng, ll.lat] }, properties: { type: 'incendie_noeud', id: n.id, block: n.block } })
   }
-  for (const rp of data.reseauProjete) {
+  for (const rp of (data.reseauProjete || [])) {
     const coords = rp.vertices.map(v => { const ll = toLatLng(v.x, v.y, crsCode); return [ll.lng, ll.lat] })
     features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: { type: 'reseau_projete' } })
   }
@@ -697,7 +697,7 @@ export default function MapView({ data, format, dxfContent, fileName }) {
             <>
               {(data.planPipes || data.pipes) && (
                 <span className="badge pipe">
-                  {data.planPipes ? `${data.planPipes.filter(p => p.diam > 0).length}/${data.planPipes.length} conduites` : `${data.pipes.filter(p => (p.vertices?.length||0) >= 2).length} conduites (Civil3D)`}
+                  {data.planPipes ? `${data.planPipes.filter(p => p.diam > 0).length}/${data.planPipes.length} conduites` : `${(data.pipes || []).filter(p => (p.vertices?.length||0) >= 2).length} conduites (Civil3D)`}
                 </span>
               )}
               {data.manholes?.length > 0 && <span className="badge manhole">{data.manholes.filter(m => m.profileId || m.id !== 'R?').length} regards</span>}
