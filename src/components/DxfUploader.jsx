@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import CsvMappingDialog from './CsvMappingDialog'
 
-export default function DxfUploader({ onData }) {
+export default function DxfUploader({ onData, onConfirmToProject, projectMode }) {
   const inputRef = useRef(null)
   const [loading, setLoading] = useState(false)
   const [fileName, setFileName] = useState('')
@@ -95,8 +95,6 @@ export default function DxfUploader({ onData }) {
     setShowMapping(false)
     setLoading(true)
     try {
-      const { generateInp, generateSummary } = await import('../utils/inpGenerator.js')
-
       let mappedData
       if (isMulti && multiData) {
         mappedData = multiData
@@ -111,28 +109,32 @@ export default function DxfUploader({ onData }) {
         mappedData = mapCsvToEpanet(parsed, mapping, detectedType)
       }
 
-      mappedData.title = `Generated from ${fileName}`
-      const result = generateInp(mappedData)
-      const blob = new Blob([result.content], { type: 'text/plain' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = fileName.replace(/\.csv$/i, '.inp')
-      a.click()
-      URL.revokeObjectURL(url)
+      if (projectMode && onConfirmToProject) {
+        onConfirmToProject(mappedData, fileName)
+      } else {
+        const { generateInp, generateSummary } = await import('../utils/inpGenerator.js')
+        mappedData.title = `Generated from ${fileName}`
+        const result = generateInp(mappedData)
+        const blob = new Blob([result.content], { type: 'text/plain' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = fileName.replace(/\.csv$/i, '.inp')
+        a.click()
+        URL.revokeObjectURL(url)
 
-      const summary = generateSummary(result)
-      alert(summary)
+        const summary = generateSummary(result)
+        alert(summary)
 
-      onData({
-        junctions: mappedData.junctions || [],
-        pipes: mappedData.pipes || [],
-        valves: mappedData.valves || [],
-        pumps: mappedData.pumps || [],
-        tanks: mappedData.tanks || [],
-        reservoirs: mappedData.reservoirs || [],
-      }, fileName.replace(/\.csv$/i, '.inp'), 'epanet-inp')
-
+        onData({
+          junctions: mappedData.junctions || [],
+          pipes: mappedData.pipes || [],
+          valves: mappedData.valves || [],
+          pumps: mappedData.pumps || [],
+          tanks: mappedData.tanks || [],
+          reservoirs: mappedData.reservoirs || [],
+        }, fileName.replace(/\.csv$/i, '.inp'), 'epanet-inp')
+      }
     } catch (err) {
       console.error(err)
       alert('Erreur lors du traitement CSV: ' + err.message)
@@ -282,6 +284,7 @@ export default function DxfUploader({ onData }) {
           rawCsv={csvRawContent}
           onConfirm={handleMappingConfirm}
           onCancel={handleMappingCancel}
+          projectMode={projectMode}
         />
       )}
     </>
