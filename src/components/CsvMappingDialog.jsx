@@ -174,7 +174,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
   const handleTypeChange = useCallback((newType) => {
     setSelectedType(newType)
     setFieldMappings({})
-    setNotification(newType ? `تم تحديث الاقتراحات بناءً على النوع الجديد (${TYPE_LABELS[newType] || newType})` : null)
+    setNotification(newType ? `Suggestions updated for new type (${TYPE_LABELS[newType] || newType})` : null)
     setTimeout(() => setNotification(null), 3000)
   }, [])
 
@@ -279,9 +279,9 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
     if (currentType === 'CONTROLS') {
       return (
         <div style={{ padding: 16, background: '#f8f9fa', borderRadius: 6, border: '1px solid #e9ecef' }}>
-          <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>قواعد التحكم (CONTROLS)</h4>
+          <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>Control Rules (CONTROLS)</h4>
           <p style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
-            هذا القسم يحتوي نصوص تحكم كاملة، لا يمكن تفكيكها بأعمدة. كل صف يمثل حكماً واحداً.
+            This section contains full control texts that cannot be broken into columns. Each row represents one rule.
           </p>
           {parsed?.rows.slice(0, 5).map((row, i) => {
             const vals = Object.values(row).filter(v => v && v !== ';').join(',').trim()
@@ -293,9 +293,9 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
     if (currentType === 'LABELS') {
       return (
         <div style={{ padding: 16, background: '#f8f9fa', borderRadius: 6, border: '1px solid #e9ecef' }}>
-          <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>تسميات نصية (LABELS)</h4>
+          <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>Text Labels (LABELS)</h4>
           <p style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
-            كل تسمية: X, Y, "النص", معرّف_مرجعي (اختياري). تُدمج تلقائياً مع العناصر.
+            Each label: X, Y, "text", reference_id (optional). Merged automatically with elements.
           </p>
           {parsed?.rows.slice(0, 5).map((row, i) => {
             const vals = Object.values(row).slice(1).join(' ').trim()
@@ -313,9 +313,9 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
         <div style={STYLE.dialog} onClick={(e) => e.stopPropagation()}>
           <div style={STYLE.header}>
             <div>
-              <h3 style={{ margin: 0, fontSize: 16 }}>ملف مسطّح موحّد — كشف تلقائي بثقة عالية</h3>
+              <h3 style={{ margin: 0, fontSize: 16 }}>Unified flat file — Auto-detected with high confidence</h3>
               <p style={{ margin: '4px 0 0', fontSize: 12, color: '#6c757d' }}>
-                {parsed ? `${parsed.rows.length} صف | عمود العنصر المميِّز: "Section"` : ''}
+                {parsed ? `${parsed.rows.length} rows | Key element column: "Section"` : ''}
               </p>
             </div>
           </div>
@@ -325,10 +325,10 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
               <div style={STYLE.sectionRow(expandedSection === 'JUNCTIONS')} onClick={() => setExpandedSection(expandedSection === 'JUNCTIONS' ? null : 'JUNCTIONS')}>
                 <span>{expandedSection === 'JUNCTIONS' ? '▼' : '▶'}</span>
                 <span style={{ fontWeight: 600 }}>JUNCTIONS</span>
-                <span style={{ color: '#6c757d' }}>({multiData.junctions.length} صف)</span>
+                <span style={{ color: '#6c757d' }}>({multiData.junctions.length} rows)</span>
                 {confidenceBadge(0.98)}
                 <span style={{ flex: 1 }} />
-                <span style={{ fontSize: 11, color: '#28a745' }}>مكتشف تلقائياً</span>
+                <span style={{ fontSize: 11, color: '#28a745' }}>Auto-detected</span>
               </div>
             )}
             {expandedSection === 'JUNCTIONS' && (
@@ -360,10 +360,10 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
               <div style={STYLE.sectionRow(expandedSection === 'PIPES')} onClick={() => setExpandedSection(expandedSection === 'PIPES' ? null : 'PIPES')}>
                 <span>{expandedSection === 'PIPES' ? '▼' : '▶'}</span>
                 <span style={{ fontWeight: 600 }}>PIPES</span>
-                <span style={{ color: '#6c757d' }}>({multiData.pipes.length} صف)</span>
+                <span style={{ color: '#6c757d' }}>({multiData.pipes.length} rows)</span>
                 {confidenceBadge(0.96)}
                 <span style={{ flex: 1 }} />
-                <span style={{ fontSize: 11, color: '#28a745' }}>مكتشف تلقائياً</span>
+                <span style={{ fontSize: 11, color: '#28a745' }}>Auto-detected</span>
               </div>
             )}
             {expandedSection === 'PIPES' && (
@@ -400,10 +400,10 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                   <div style={STYLE.sectionRow(expandedSection === section)} onClick={() => setExpandedSection(expandedSection === section ? null : section)}>
                     <span>{expandedSection === section ? '▼' : '▶'}</span>
                     <span style={{ fontWeight: 600 }}>{section}</span>
-                    <span style={{ color: '#6c757d' }}>({items.length} صف)</span>
+                    <span style={{ color: '#6c757d' }}>({items.length} rows)</span>
                     {confidenceBadge(0.95)}
                     <span style={{ flex: 1 }} />
-                    <span style={{ fontSize: 11, color: '#28a745' }}>مكتشف تلقائياً</span>
+                    <span style={{ fontSize: 11, color: '#28a745' }}>Auto-detected</span>
                   </div>
                   {expandedSection === section && (
                     <div style={{ padding: '8px 12px 12px', background: '#f8fffe', borderRadius: 6, marginBottom: 4, border: '1px solid #d4edda' }}>
@@ -427,10 +427,10 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
               <div style={STYLE.sectionRow(expandedSection === 'PATTERNS')} onClick={() => setExpandedSection(expandedSection === 'PATTERNS' ? null : 'PATTERNS')}>
                 <span>{expandedSection === 'PATTERNS' ? '▼' : '▶'}</span>
                 <span style={{ fontWeight: 600 }}>PATTERNS</span>
-                <span style={{ color: '#6c757d' }}>({multiData.patterns.length} صف → {multiData.sectionSummary.PATTERNS?.groupedCount || '?'} نمط)</span>
+                <span style={{ color: '#6c757d' }}>({multiData.patterns.length} صف → {multiData.sectionSummary.PATTERNS?.groupedCount || '?'} patterns)</span>
                 {confidenceBadge(0.97)}
                 <span style={{ flex: 1 }} />
-                <span style={{ fontSize: 11, color: '#28a745' }}>مكتشف تلقائياً</span>
+                <span style={{ fontSize: 11, color: '#28a745' }}>Auto-detected</span>
               </div>
             )}
             {expandedSection === 'PATTERNS' && (
@@ -452,10 +452,10 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
               <div style={STYLE.sectionRow(expandedSection === 'CURVES')} onClick={() => setExpandedSection(expandedSection === 'CURVES' ? null : 'CURVES')}>
                 <span>{expandedSection === 'CURVES' ? '▼' : '▶'}</span>
                 <span style={{ fontWeight: 600 }}>CURVES</span>
-                <span style={{ color: '#6c757d' }}>({multiData.curves.length} صف → {multiData.sectionSummary.CURVES?.groupedCount || '?'} منحنى)</span>
+                <span style={{ color: '#6c757d' }}>({multiData.curves.length} صف → {multiData.sectionSummary.CURVES?.groupedCount || '?'} curves)</span>
                 {confidenceBadge(0.95)}
                 <span style={{ flex: 1 }} />
-                <span style={{ fontSize: 11, color: '#28a745' }}>مكتشف تلقائياً</span>
+                <span style={{ fontSize: 11, color: '#28a745' }}>Auto-detected</span>
               </div>
             )}
             {expandedSection === 'CURVES' && (
@@ -477,7 +477,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
               <div style={STYLE.sectionRow(false)}>
                 <span>📎</span>
                 <span style={{ fontWeight: 600 }}>COORDINATES</span>
-                <span style={{ color: '#6c757d' }}>({multiData.coordinates.length} صف — ملحق تصنيفي)</span>
+                <span style={{ color: '#6c757d' }}>({multiData.coordinates.length} صف — attachment)</span>
                 {confidenceBadge(0.99)}
               </div>
             )}
@@ -486,7 +486,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
               <div style={STYLE.sectionRow(false)}>
                 <span>📎</span>
                 <span style={{ fontWeight: 600 }}>TAGS</span>
-                <span style={{ color: '#6c757d' }}>({multiData.tags.length} صف — ملحق تصنيفي)</span>
+                <span style={{ color: '#6c757d' }}>({multiData.tags.length} صف — attachment)</span>
                 {confidenceBadge(0.95)}
               </div>
             )}
@@ -495,7 +495,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
               <div style={STYLE.sectionRow(false)}>
                 <span>📎</span>
                 <span style={{ fontWeight: 600 }}>LABELS</span>
-                <span style={{ color: '#6c757d' }}>({multiData.labels.length} تسمية — تحليل نصي)</span>
+                <span style={{ color: '#6c757d' }}>({multiData.labels.length} labels — text analysis)</span>
                 {confidenceBadge(0.90)}
               </div>
             )}
@@ -503,7 +503,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
             {Object.keys(multiData.options).length > 0 && (
               <div style={STYLE.sectionRow(expandedSection === 'OPTIONS')} onClick={() => setExpandedSection(expandedSection === 'OPTIONS' ? null : 'OPTIONS')}>
                 <span>{expandedSection === 'OPTIONS' ? '▼' : '▶'}</span>
-                <span style={{ fontWeight: 600 }}>⚙️ إعدادات عامة</span>
+                <span style={{ fontWeight: 600 }}>⚙️ General Settings</span>
                 <span style={{ color: '#6c757d' }}>(OPTIONS/TIMES)</span>
               </div>
             )}
@@ -511,7 +511,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
               <div style={{ padding: '8px 12px 12px', background: '#f8f9fa', borderRadius: 6, marginBottom: 4, border: '1px solid #e9ecef' }}>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={STYLE.previewTable}>
-                    <thead><tr><th style={STYLE.previewTh}>المفتاح</th><th style={STYLE.previewTh}>القيمة</th></tr></thead>
+                    <thead><tr><th style={STYLE.previewTh}>Key</th><th style={STYLE.previewTh}>Value</th></tr></thead>
                     <tbody>
                       {Object.entries({ ...multiData.options, ...multiData.times }).map(([k, v], i) => (
                         <tr key={i}><td style={STYLE.previewTd}>{k}</td><td style={STYLE.previewTd}>{v}</td></tr>
@@ -525,8 +525,8 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
             {multiData.junkColumns?.length > 0 && (
               <div style={STYLE.sectionRow(false)}>
                 <span>🗑️</span>
-                <span style={{ fontWeight: 600 }}>أعمدة متجاهَلة</span>
-                <span style={{ color: '#6c757d' }}>({multiData.junkColumns.length} عمود — قمامة/فارغة)</span>
+                <span style={{ fontWeight: 600 }}>Ignored columns</span>
+                <span style={{ color: '#6c757d' }}>({multiData.junkColumns.length} columns — junk/empty)</span>
               </div>
             )}
 
@@ -534,7 +534,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
               <div style={STYLE.sectionRow(false)}>
                 <span>📎</span>
                 <span style={{ fontWeight: 600 }}>CONTROLS</span>
-                <span style={{ color: '#6c757d' }}>({multiData.controls.length} حكم تحكم)</span>
+                <span style={{ color: '#6c757d' }}>({multiData.controls.length} control rules)</span>
               </div>
             )}
 
@@ -542,15 +542,15 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
               <div style={STYLE.sectionRow(false)}>
                 <span>📎</span>
                 <span style={{ fontWeight: 600 }}>STATUS</span>
-                <span style={{ color: '#6c757d' }}>({multiData.status.length} حالة)</span>
+                <span style={{ color: '#6c757d' }}>({multiData.status.length} status)</span>
               </div>
             )}
           </div>
 
           <div style={STYLE.footer}>
-            <button onClick={onCancel} style={STYLE.btn('secondary')}>إلغاء</button>
+            <button onClick={onCancel} style={STYLE.btn('secondary')}>Cancel</button>
             <button onClick={handleConfirm} style={STYLE.btn('primary')}>
-              تأكيد وتوليد .inp ({multiData.junctions.length + multiData.pipes.length + multiData.valves.length + multiData.pumps.length + multiData.tanks.length + multiData.reservoirs.length} عنصر)
+              Confirm and Generate .inp ({multiData.junctions.length + multiData.pipes.length + multiData.valves.length + multiData.pumps.length + multiData.tanks.length + multiData.reservoirs.length} elements)
             </button>
           </div>
         </div>
@@ -563,9 +563,9 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
       <div style={STYLE.dialog} onClick={(e) => e.stopPropagation()}>
         <div style={STYLE.header}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 16 }}>ربط أعمدة CSV بعناصر EPANET</h3>
+            <h3 style={{ margin: 0, fontSize: 16 }}>Map CSV columns to EPANET elements</h3>
             <p style={{ margin: '4px 0 0', fontSize: 12, color: '#6c757d' }}>
-              {parsed ? `${parsed.rows.length} صف | ${parsed.headers.length} عمود` : ''}
+              {parsed ? `${parsed.rows.length} rows | ${parsed.headers.length} columns` : ''}
             </p>
           </div>
         </div>
@@ -573,9 +573,9 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
         <div style={STYLE.body}>
           <div style={{ marginBottom: 16, padding: '12px 16px', background: '#f0f4f8', borderRadius: 8, border: '1px solid #d0d7de' }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#333' }}>
-              نوع العنصر {!currentType && <span style={{ color: '#dc3545', fontWeight: 400 }}>* الرجاء الاختيار</span>}
+              Element Type {!currentType && <span style={{ color: '#dc3545', fontWeight: 400 }}>* Please select</span>}
               {isHighConfidence && !selectedType && (
-                <span style={{ fontSize: 11, color: '#28a745', fontWeight: 400, marginRight: 8 }}>🔍 مكتشف تلقائياً بثقة {(confidence * 100).toFixed(0)}%</span>
+                <span style={{ fontSize: 11, color: '#28a745', fontWeight: 400, marginRight: 8 }}>🔍 Auto-detected with confidence {(confidence * 100).toFixed(0)}%</span>
               )}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -600,7 +600,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
 
           {!currentType && (
             <div style={{ padding: 20, textAlign: 'center', color: '#856404', background: '#fff3cd', borderRadius: 6, fontSize: 13 }}>
-              لم نتمكن من تحديد نوع البيانات بثقة كافية — الرجاء اختيار نوع العنصر أعلاه
+              Could not determine data type with sufficient confidence — Please select an element type above
             </div>
           )}
 
@@ -611,21 +611,21 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                   <h4 style={{ margin: 0, fontSize: 14, color: '#333' }}>
-                    تعيين الأعمدة — {TYPE_LABELS[currentType]}
+                    Column Mapping — {TYPE_LABELS[currentType]}
                   </h4>
                   {!isSimpleType(currentType) && (
                     <button
                       onClick={() => setShowPreview(!showPreview)}
                       style={{ fontSize: 11, color: '#2c7bb6', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
                     >
-                      {showPreview ? 'إخفاء المعاينة' : 'إظهار المعاينة'}
+                      {showPreview ? 'Hide Preview' : 'Show Preview'}
                     </button>
                   )}
                 </div>
 
                 {isSimpleType(currentType) && (
                   <div style={{ fontSize: 12, color: '#6c757d', marginBottom: 8, padding: '6px 10px', background: '#e8f4fd', borderRadius: 4 }}>
-                    ملحق تصنيفي — يُدمج مع العناصر الموجودة مسبقاً via ID
+                    Attachment — merged with existing elements via ID
                   </div>
                 )}
 
@@ -636,9 +636,9 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                     color: allRequiredMet ? '#155724' : '#721c24',
                     border: `1px solid ${allRequiredMet ? '#c3e6cb' : '#f5c6cb'}`,
                   }}>
-                    الحقول الإلزامية: {mappedRequiredCount}/{requiredFields.length}
+                    Required fields: {mappedRequiredCount}/{requiredFields.length}
                     {!allRequiredMet && (
-                      <span> — الناقصة: {requiredFields.filter(f => !Object.values(mergedMappings).some(m => m.field === f && !m.ignored && m.section === currentType)).join(', ')}</span>
+                      <span> — Missing: {requiredFields.filter(f => !Object.values(mergedMappings).some(m => m.field === f && !m.ignored && m.section === currentType)).join(', ')}</span>
                     )}
                   </div>
                 )}
@@ -646,12 +646,12 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                 <table style={STYLE.table}>
                   <thead>
                     <tr>
-                      <th style={STYLE.th}>عمود CSV</th>
-                      <th style={STYLE.th}>الحقل المكتشف</th>
-                      <th style={STYLE.th}>الثقة</th>
-                      <th style={STYLE.th}>التحقق</th>
-                      <th style={STYLE.th}>التعيين اليدوي</th>
-                      <th style={STYLE.th}>إجراءات</th>
+                      <th style={STYLE.th}>CSV Column</th>
+                      <th style={STYLE.th}>Detected Field</th>
+                      <th style={STYLE.th}>Confidence</th>
+                      <th style={STYLE.th}>Validation</th>
+                      <th style={STYLE.th}>Manual Assignment</th>
+                      <th style={STYLE.th}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -767,10 +767,10 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
         </div>
 
         <div style={STYLE.footer}>
-          <button onClick={onCancel} style={STYLE.btn('secondary')}>إلغاء</button>
+          <button onClick={onCancel} style={STYLE.btn('secondary')}>Cancel</button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {!currentType && (
-              <span style={{ fontSize: 11, color: '#dc3545' }}>اختر نوع العنصر أولاً</span>
+              <span style={{ fontSize: 11, color: '#dc3545' }}>اختر Element Type أولاً</span>
             )}
             {currentType && !allRequiredMet && !isSpecialType(currentType) && (
               <span style={{ fontSize: 11, color: '#856404' }}>يرجى تعيين جميع الحقول الإلزامية</span>

@@ -17,7 +17,7 @@ const STYLE = {
   btn: (v) => ({ padding: '8px 16px', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 13, background: v === 'primary' ? '#28a745' : v === 'info' ? '#2c7bb6' : '#6c757d', color: '#fff' }),
 }
 
-const STATUS_LABELS = { pending: 'بانتظار المراجعة', type_needed: 'يحتاج اختيار النوع', type_selected: 'النوع محدد', mapping_incomplete: 'ربط غير مكتمل', validated: 'تمت المراجعة ✓' }
+const STATUS_LABELS = { pending: 'Pending Review', type_needed: 'Needs type selection', type_selected: 'Type selected', mapping_incomplete: 'Mapping incomplete', validated: 'Reviewed ✓' }
 const EMPTY = { junctions: [], pipes: [], valves: [], pumps: [], tanks: [], reservoirs: [], coordinates: [], patterns: [], curves: [], controls: [], status: [] }
 
 export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
@@ -101,18 +101,18 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
       <div style={STYLE.dialog}>
         <div style={STYLE.header}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 15 }}>📋 مراجعة ملفات الدفعة</h3>
+            <h3 style={{ margin: 0, fontSize: 15 }}>📋 Batch File Review</h3>
             <div style={STYLE.progress}>
-              <span>الملف {activeIndex + 1} من {files.length}</span>
+              <span>File {activeIndex + 1} of {files.length}</span>
               <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>{fileStates.map((f, i) => <div key={f.id} style={STYLE.dot(i === activeIndex, f.status === 'validated')} />)}</div>
               <span style={{ color: '#6c757d', fontSize: 11 }}>({vCount}/{files.length})</span>
             </div>
           </div>
-          <button onClick={onCancel} style={STYLE.btn('secondary')}>إلغاء</button>
+          <button onClick={onCancel} style={STYLE.btn('secondary')}>Cancel</button>
         </div>
         <div style={STYLE.body}>
           <div style={STYLE.sidebar}>
-            {preprocessing && <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: '#6c757d' }}>جاري تحليل الملفات...</div>}
+            {preprocessing && <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: '#6c757d' }}>Analyzing files...</div>}
             {fileStates.map((e, i) => (
               <div key={e.id} style={STYLE.fileItem(i === activeIndex, e.status)} onClick={() => { setActiveIndex(i); if (!e.isMultiSection && e.status !== 'validated') setShowMapping(true); else setShowMapping(false) }}>
                 <span>{STYLE.statusIcon(e.status)}</span>
@@ -133,18 +133,18 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
                 </div>
                 {active.isMultiSection && active.multiData && (
                   <div style={{ padding: 14, background: '#f8f9fa', borderRadius: 6, fontSize: 12 }}>
-                    <p style={{ margin: '0 0 8px', fontWeight: 600 }}>ملف مسطّح موحّد — تم التحليل تلقائياً</p>
+                    <p style={{ margin: '0 0 8px', fontWeight: 600 }}>Unified flat file — Auto-analyzed</p>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                      {Object.entries(active.multiData.sectionSummary || {}).map(([s, info]) => <div key={s} style={{ padding: '4px 8px', background: '#fff', borderRadius: 4, border: '1px solid #e0e0e0' }}><strong>{s}</strong>: {info.rowCount} صف</div>)}
+                      {Object.entries(active.multiData.sectionSummary || {}).map(([s, info]) => <div key={s} style={{ padding: '4px 8px', background: '#fff', borderRadius: 4, border: '1px solid #e0e0e0' }}><strong>{s}</strong>: {info.rowCount} rows</div>)}
                     </div>
-                    <p style={{ margin: '8px 0 0', color: '#28a745', fontSize: 11 }}>✅ جاهز — لا يحتاج مراجعة يدوية</p>
+                    <p style={{ margin: '8px 0 0', color: '#28a745', fontSize: 11 }}>✅ Ready — No manual review needed</p>
                   </div>
                 )}
-                {!active.isMultiSection && active.status === 'validated' && <div style={{ padding: 14, background: '#d4edda', borderRadius: 6, fontSize: 12, color: '#155724' }}>✅ تمت مراجعة هذا الملف — الربط محفوظ</div>}
+                {!active.isMultiSection && active.status === 'validated' && <div style={{ padding: 14, background: '#d4edda', borderRadius: 6, fontSize: 12, color: '#155724' }}>✅ File reviewed — Mapping saved</div>}
                 {!active.isMultiSection && active.status !== 'validated' && (
                   <div style={{ padding: 14, background: '#f8f9fa', borderRadius: 6, fontSize: 12 }}>
-                    <p style={{ margin: '0 0 10px', fontWeight: 500 }}>هذه المرحلة مخصصة فقط لإسناد الأعمدة</p>
-                    <button onClick={() => setShowMapping(true)} style={STYLE.btn('info')}>مراجعة ربط الأعمدة</button>
+                    <p style={{ margin: '0 0 10px', fontWeight: 500 }}>This step is only for column mapping</p>
+                    <button onClick={() => setShowMapping(true)} style={STYLE.btn('info')}>Review Column Mapping</button>
                   </div>
                 )}
               </div>
@@ -152,9 +152,9 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
           </div>
         </div>
         <div style={STYLE.nav}>
-          <button onClick={handlePrev} disabled={!canPrev} style={{ ...STYLE.btn('secondary'), opacity: canPrev ? 1 : 0.4 }}>← السابق</button>
+          <button onClick={handlePrev} disabled={!canPrev} style={{ ...STYLE.btn('secondary'), opacity: canPrev ? 1 : 0.4 }}>← Previous</button>
           <button onClick={isLastStep ? buildAndDownload : handleNext} disabled={!canNext && !isLastStep} style={{ ...STYLE.btn(isLastStep ? 'primary' : 'info'), opacity: canNext || isLastStep ? 1 : 0.4 }}>
-            {isLastStep ? '✅ إنهاء المراجعة وإنشاء مشروع EPANET' : 'التالي →'}
+            {isLastStep ? '✅ Finish Review & Generate EPANET Project' : 'Next →'}
           </button>
         </div>
       </div>
