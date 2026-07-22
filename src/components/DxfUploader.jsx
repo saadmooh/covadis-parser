@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useRef, useState, useEffect } from 'react'
 import CsvMappingDialog from './CsvMappingDialog'
 
 export default function DxfUploader({ onData, onConfirmToProject, projectMode }) {
@@ -8,9 +8,13 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode })
   const [dragOver, setDragOver] = useState(false)
   const [csvRawContent, setCsvRawContent] = useState('')
   const [showMapping, setShowMapping] = useState(false)
+  const [fileQueue, setFileQueue] = useState([])
+  const [queueIndex, setQueueIndex] = useState(0)
 
-  const handleFile = useCallback(async (file) => {
-    if (!file) return
+  const fileQueueRef = useRef([])
+  const queueIndexRef = useRef(0)
+
+  const processFile = useCallback(async (file) => {
     const name = file.name.toLowerCase()
     setFileName(file.name)
 
@@ -25,7 +29,7 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode })
         alert('Erreur lors du chargement du JSON: ' + err.message)
       }
       setLoading(false)
-      return
+      return true
     }
 
     if (name.endsWith('.csv')) {
@@ -34,23 +38,24 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode })
         const text = await file.text()
         const lines = text.split(/\r?\n/).filter(l => l.trim())
         if (lines.length < 2) {
-          alert('Le fichier CSV doit contenir une ligne d\'en-tête et au moins une ligne de données')
+          alert(`Le fichier ${file.name} ne contient pas assez de données`)
           setLoading(false)
-          return
+          return false
         }
         setCsvRawContent(text)
         setShowMapping(true)
+        return true
       } catch (err) {
         console.error(err)
         alert('Erreur lors du chargement du CSV: ' + err.message)
+        setLoading(false)
+        return false
       }
-      setLoading(false)
-      return
     }
 
     if (!name.endsWith('.dxf')) {
       alert('Veuillez sélectionner un fichier DXF, JSON ou CSV')
-      return
+      return false
     }
 
     if (file.size > 50 * 1024 * 1024) {
@@ -59,7 +64,7 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode })
         `L'analyse peut prendre plusieurs secondes.\n` +
         `Voulez-vous continuer ?`
       )
-      if (!proceed) { setLoading(false); return }
+      if (!proceed) return false
     }
 
     setLoading(true)
@@ -82,14 +87,87 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode })
       alert('Erreur lors de l\'analyse du fichier: ' + err.message)
     }
     setLoading(false)
+    return true
   }, [onData])
+
+  const advanceQueueRef = useRef(null)
+
+  const advanceQueue = useCallback(() => {
+    const nextIdx = queueIndexRef.current + 1
+    const queue = fileQueueRef.current
+    if (nextIdx >= queue.length) {
+      fileQueueRef.current = []
+      queueIndexRef.current = 0
+      setFileQueue([])
+      setQueueIndex(0)
+      setFileName('')
+      return
+    }
+    queueIndexRef.current = nextIdx
+    setQueueIndex(nextIdx)
+    const nextFile = queue[nextIdx]
+    setFileName(nextFile.name)
+
+    if (nextFile.name.toLowerCase().endsWith('.csv')) {
+      nextFile.text().then(text => {
+        const lines = text.split(/\r?\n/).filter(l => l.trim())
+        if (lines.length < 2) {
+          alert(`Le fichier ${nextFile.name} ne contient pas assez de données`)
+          advanceQueueRef.current?.()
+          return
+        }
+        setCsvRawContent(text)
+        setShowMapping(true)
+      })
+    } else {
+      processFile(nextFile).then(() => {
+        advanceQueueRef.current?.()
+      })
+    }
+  }, [processFile])
+
+  useEffect(() => { advanceQueueRef.current = advanceQueue })
+
+  const handleFiles = useCallback((files) => {
+    const fileArray = Array.from(files)
+    if (fileArray.length === 0) return
+
+    if (fileArray.length === 1) {
+      processFile(fileArray[0])
+      return
+    }
+
+    fileQueueRef.current = fileArray
+    queueIndexRef.current = 0
+    setFileQueue(fileArray)
+    setQueueIndex(0)
+
+    const firstFile = fileArray[0]
+    setFileName(firstFile.name)
+
+    if (firstFile.name.toLowerCase().endsWith('.csv')) {
+      firstFile.text().then(text => {
+        const lines = text.split(/\r?\n/).filter(l => l.trim())
+        if (lines.length < 2) {
+          alert(`Le fichier ${firstFile.name} ne contient pas assez de données`)
+          advanceQueue()
+          return
+        }
+        setCsvRawContent(text)
+        setShowMapping(true)
+      })
+    } else {
+      processFile(firstFile).then(() => {
+        advanceQueue()
+      })
+    }
+  }, [processFile, advanceQueue])
 
   const onDrop = useCallback((e) => {
     e.preventDefault()
     setDragOver(false)
-    const file = e.dataTransfer.files[0]
-    if (file) handleFile(file)
-  }, [handleFile])
+    handleFiles(e.dataTransfer.files)
+  }, [handleFiles])
 
   const handleMappingConfirm = async ({ mapping, detectedType, multiData, isMulti }) => {
     setShowMapping(false)
@@ -111,7 +189,6 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode })
 
       if (projectMode && onConfirmToProject) {
         onConfirmToProject(mappedData, fileName)
-        setFileName('')
         setCsvRawContent('')
       } else {
         const { generateInp, generateSummary } = await import('../utils/inpGenerator.js')
@@ -136,6 +213,16 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode })
           tanks: mappedData.tanks || [],
           reservoirs: mappedData.reservoirs || [],
         }, fileName.replace(/\.csv$/i, '.inp'), 'epanet-inp')
+      }
+
+      if (fileQueueRef.current.length > 0 && queueIndexRef.current < fileQueueRef.current.length - 1) {
+        advanceQueue()
+      } else {
+        fileQueueRef.current = []
+        queueIndexRef.current = 0
+        setFileQueue([])
+        setQueueIndex(0)
+        setFileName('')
       }
     } catch (err) {
       console.error(err)
@@ -231,7 +318,18 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode })
   const handleMappingCancel = () => {
     setShowMapping(false)
     setCsvRawContent('')
+    if (fileQueueRef.current.length > 0 && queueIndexRef.current < fileQueueRef.current.length - 1) {
+      advanceQueue()
+    } else {
+      fileQueueRef.current = []
+      queueIndexRef.current = 0
+      setFileQueue([])
+      setQueueIndex(0)
+      setFileName('')
+    }
   }
+
+  const hasQueue = fileQueue.length > 0
 
   return (
     <>
@@ -245,10 +343,10 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode })
           ref={inputRef}
           type="file"
           accept=".dxf,.json,.csv"
+          multiple
           style={{ display: 'none' }}
           onChange={(e) => {
-            const file = e.target.files?.[0]
-            if (file) handleFile(file)
+            if (e.target.files?.length) handleFiles(e.target.files)
           }}
         />
         {loading ? (
@@ -265,19 +363,27 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode })
                 <line x1="12" y1="3" x2="12" y2="15" />
               </svg>
             </div>
-            <p className="upload-text">
-              {fileName
-                ? `Fichier: ${fileName}`
-                : projectMode
-                  ? 'Glissez-déposez un fichier DXF, JSON ou CSV — أو اختر ملفاً آخر'
-                  : 'Glissez-déposez un fichier DXF, JSON ou CSV ici'}
-            </p>
+            {hasQueue ? (
+              <p className="upload-text">
+                📋 {fileQueue.length} ملفات CSV — المعالجة: {queueIndex + 1}/{fileQueue.length}
+              </p>
+            ) : (
+              <p className="upload-text">
+                {fileName
+                  ? `Fichier: ${fileName}`
+                  : projectMode
+                    ? 'Glissez-déposez ملفات DXF, JSON أو CSV — أو اختر ملفاً/عدة ملفات'
+                    : 'Glissez-déposez un fichier DXF, JSON ou CSV ici'}
+              </p>
+            )}
             <p className="upload-sub">ou</p>
             <button className="upload-btn" onClick={() => inputRef.current?.click()}>
-              {projectMode ? 'اختر ملفاً آخر' : 'Choisir un fichier DXF / JSON / CSV'}
+              {projectMode ? 'اختر ملفات' : 'Choisir un fichier DXF / JSON / CSV'}
             </button>
             <p className="upload-sub" style={{marginTop: 8, fontSize: '0.75rem'}}>
-              Les fichiers volumineux (&gt;50 Mo) peuvent être pré-traités avec <code>extract_sewer_data.mjs</code>
+              {projectMode
+                ? 'يمكنك اختيار عدة ملفات CSV دفعة واحدة'
+                : 'Fichiers multiples supportés'}
             </p>
           </>
         )}
