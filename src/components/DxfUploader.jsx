@@ -111,6 +111,8 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode })
 
       if (projectMode && onConfirmToProject) {
         onConfirmToProject(mappedData, fileName)
+        setFileName('')
+        setCsvRawContent('')
       } else {
         const { generateInp, generateSummary } = await import('../utils/inpGenerator.js')
         mappedData.title = `Generated from ${fileName}`
@@ -266,11 +268,13 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode })
             <p className="upload-text">
               {fileName
                 ? `Fichier: ${fileName}`
-                : 'Glissez-déposez un fichier DXF, JSON ou CSV ici'}
+                : projectMode
+                  ? 'Glissez-déposez un fichier DXF, JSON ou CSV — أو اختر ملفاً آخر'
+                  : 'Glissez-déposez un fichier DXF, JSON ou CSV ici'}
             </p>
             <p className="upload-sub">ou</p>
             <button className="upload-btn" onClick={() => inputRef.current?.click()}>
-              Choisir un fichier DXF / JSON / CSV
+              {projectMode ? 'اختر ملفاً آخر' : 'Choisir un fichier DXF / JSON / CSV'}
             </button>
             <p className="upload-sub" style={{marginTop: 8, fontSize: '0.75rem'}}>
               Les fichiers volumineux (&gt;50 Mo) peuvent être pré-traités avec <code>extract_sewer_data.mjs</code>
