@@ -104,7 +104,7 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
   const active = fileStates[activeIndex]
   const allDone = fileStates.every(f => f.status === 'validated')
   const vCount = fileStates.filter(f => f.status === 'validated').length
-  const isLastStep = allDone || (active?.status === 'validated' && activeIndex === fileStates.length - 1)
+  const isLastStep = allDone
   const canNext = active?.status === 'validated' || active?.isMultiSection
   const canPrev = findPrev(activeIndex) >= 0
 

@@ -100,6 +100,15 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
     return isMultiSectionCsv(rawCsv)
   }, [rawCsv])
 
+  useEffect(() => {
+    setFieldMappings(initialMapping || {})
+  }, [initialMapping])
+
+  useEffect(() => {
+    setExpandedSection(null)
+    setShowPreview(true)
+  }, [rawCsv, batchMode])
+
   const multiData = useMemo(() => {
     if (!isMulti || !rawCsv) return null
     return parseMultiSectionCsv(rawCsv)
@@ -132,7 +141,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
   const mergedMappings = useMemo(() => {
     const preserved = {}
     for (const [key, val] of Object.entries(fieldMappings)) {
-      if (!val.auto || !autoSuggestions[key.split('__')[1]]) {
+      if (!val || !val.auto || !autoSuggestions[key.split('__')[1]]) {
         preserved[key] = val
       }
     }
@@ -781,13 +790,15 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
             {overallValidation.severity === 'warning' && (
               <span style={{ fontSize: 11, color: '#856404' }}>🟡 Warnings ({overallValidation.totalWarnings})</span>
             )}
-            <button
-              onClick={handleConfirm}
-              disabled={!currentType || (!allRequiredMet && !isSpecialType(currentType)) || overallValidation.severity === 'blocking'}
-              style={{ ...STYLE.btn('primary'), opacity: currentType && (allRequiredMet || isSpecialType(currentType)) && overallValidation.severity !== 'blocking' ? 1 : 0.5, cursor: currentType ? 'pointer' : 'not-allowed' }}
-            >
-              Confirm {projectMode ? 'and Add to Project' : 'and Generate .inp'}
-            </button>
+            {!batchMode && (
+              <button
+                onClick={handleConfirm}
+                disabled={!currentType || (!allRequiredMet && !isSpecialType(currentType)) || overallValidation.severity === 'blocking'}
+                style={{ ...STYLE.btn('primary'), opacity: currentType && (allRequiredMet || isSpecialType(currentType)) && overallValidation.severity !== 'blocking' ? 1 : 0.5, cursor: currentType ? 'pointer' : 'not-allowed' }}
+              >
+                Confirm {projectMode ? 'and Add to Project' : 'and Generate .inp'}
+              </button>
+            )}
             {batchMode && (
               <button
                 onClick={() => {
@@ -795,7 +806,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                   onNext()
                 }}
                 disabled={!currentType || (!allRequiredMet && !isSpecialType(currentType)) || overallValidation.severity === 'blocking'}
-                style={{ ...STYLE.btn('info'), opacity: currentType && (allRequiredMet || isSpecialType(currentType)) && overallValidation.severity !== 'blocking' ? 1 : 0.5, cursor: currentType ? 'pointer' : 'not-allowed' }}
+                style={{ ...STYLE.btn('primary'), opacity: currentType && (allRequiredMet || isSpecialType(currentType)) && overallValidation.severity !== 'blocking' ? 1 : 0.5, cursor: currentType ? 'pointer' : 'not-allowed' }}
               >
                 Next →
               </button>
