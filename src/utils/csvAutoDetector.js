@@ -367,10 +367,24 @@ export function suggestFieldForColumn(header, rows, sectionKey) {
 }
 
 export function suggestMappingsForType(headers, rows, sectionKey) {
-  return headers.map(header => {
+  const results = headers.map(header => {
     const { field, score } = suggestFieldForColumn(header, rows, sectionKey)
     return { header, field, score }
   })
+
+  const hasAnySuggestion = results.some(r => r.field && r.score >= 0.3)
+  if (!hasAnySuggestion && POSITIONAL_SCHEMA[sectionKey]) {
+    const positionalFields = POSITIONAL_SCHEMA[sectionKey].filter(f => f !== 'factors')
+    const nonJunkHeaders = headers.filter(h => !isJunkColumn(rows, h))
+    for (let i = 0; i < Math.min(nonJunkHeaders.length, positionalFields.length); i++) {
+      const idx = results.findIndex(r => r.header === nonJunkHeaders[i])
+      if (idx >= 0 && !results[idx].field) {
+        results[idx] = { header: nonJunkHeaders[i], field: positionalFields[i], score: 0.5 }
+      }
+    }
+  }
+
+  return results
 }
 
 function collectColumnValues(rows, header) {
