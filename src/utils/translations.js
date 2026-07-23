@@ -1,5 +1,8 @@
 const translations = {
   en: {
+    // App
+    appTitle: 'Covadis - Extraction Réseau Assainissement',
+    appSub: 'Analyse de fichiers DXF • Visualisation cartographique • Export Shapefile',
     // BatchUploadDialog
     batchTitle: 'Batch File Review',
     fileOf: (cur, total) => `File ${cur} of ${total}`,
@@ -82,6 +85,8 @@ const translations = {
   },
   fr: {
     batchTitle: 'Revue des fichiers',
+    appTitle: 'Covadis - Extraction Réseau Assainissement',
+    appSub: 'Analyse de fichiers DXF • Visualisation cartographique • Export Shapefile',
     fileOf: (cur, total) => `Fichier ${cur} sur ${total}`,
     cancel: 'Annuler',
     analyzing: 'Analyse des fichiers...',
@@ -159,6 +164,8 @@ const translations = {
   },
   ar: {
     batchTitle: 'مراجعة الملفات',
+    appTitle: '_covadis_ - استخراج شبكة الصرف',
+    appSub: 'تحليل ملفات DXF • عرض خرائطي • تصدير Shapefile',
     fileOf: (cur, total) => `الملف ${cur} من ${total}`,
     cancel: 'إلغاء',
     analyzing: 'جاري تحليل الملفات...',

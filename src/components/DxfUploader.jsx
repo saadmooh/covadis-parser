@@ -2,7 +2,7 @@ import { useCallback, useRef, useState, useEffect } from 'react'
 import CsvMappingDialog from './CsvMappingDialog'
 import BatchUploadDialog from './BatchUploadDialog'
 
-export default function DxfUploader({ onData, onConfirmToProject, projectMode }) {
+export default function DxfUploader({ onData, onConfirmToProject, projectMode, lang = 'en' }) {
   const inputRef = useRef(null)
   const [loading, setLoading] = useState(false)
   const [fileName, setFileName] = useState('')
@@ -406,6 +406,7 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode })
           onConfirm={handleMappingConfirm}
           onCancel={handleMappingCancel}
           projectMode={projectMode}
+          lang={lang}
         />
       )}
 
@@ -414,6 +415,7 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode })
           files={batchFiles}
           onBatchConfirm={onConfirmToProject}
           onCancel={() => setBatchFiles(null)}
+          lang={lang}
         />
       )}
     </>
