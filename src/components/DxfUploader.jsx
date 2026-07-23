@@ -223,9 +223,31 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode })
   const mapCsvToEpanet = (parsed, mapping, detectedType) => {
     const { headers, rows } = parsed
     const colMap = {}
-    for (const [csvHeader, field] of Object.entries(mapping[detectedType] || {})) {
+    const typeMapping = mapping[detectedType] || mapping
+    for (const [csvHeader, field] of Object.entries(typeMapping || {})) {
+      if (typeof field !== 'string') continue
       const idx = headers.findIndex(h => h.toLowerCase() === csvHeader.toLowerCase())
       if (idx >= 0) colMap[field] = idx
+    }
+
+    if (Object.keys(colMap).length === 0 && detectedType) {
+      const POSITIONAL = {
+        JUNCTIONS: ['id', 'elevation', 'demand', 'pattern'],
+        RESERVOIRS: ['id', 'head', 'pattern'],
+        TANKS: ['id', 'elevation', 'initLevel', 'minLevel', 'maxLevel', 'diameter', 'minVol', 'volCurve'],
+        PIPES: ['id', 'node1', 'node2', 'length', 'diameter', 'roughness', 'minorLoss', 'status'],
+        PUMPS: ['id', 'node1', 'node2', 'parameters'],
+        VALVES: ['id', 'node1', 'node2', 'diameter', 'type', 'setting', 'minorLoss'],
+        PATTERNS: ['id', 'factors'],
+        CURVES: ['id', 'x', 'y'],
+        COORDINATES: ['id', 'x', 'y'],
+      }
+      const posFields = POSITIONAL[detectedType]
+      if (posFields) {
+        for (let i = 0; i < Math.min(headers.length, posFields.length); i++) {
+          colMap[posFields[i]] = i
+        }
+      }
     }
 
     const result = {
