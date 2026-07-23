@@ -398,6 +398,27 @@ function fingerprintColumn(colValues, header) {
 
   if (stats.uniqueness > 0.95 && stats.numericRatio < 0.5) {
     fingerprintHints.push({ field: 'id', reason: 'unique_non_numeric', strength: 0.8 })
+    // Check ID prefixes to help identify EPANET element type
+    const sampleValues = colValues.slice(0, 20).map(v => String(v).trim()).filter(v => v.length > 0)
+    const jCount = sampleValues.filter(v => /^J\d+$/i.test(v)).length
+    const pCount = sampleValues.filter(v => /^P\d+$/i.test(v)).length
+    const tCount = sampleValues.filter(v => /^T\d+$/i.test(v)).length
+    const rCount = sampleValues.filter(v => /^R\d+$/i.test(v)).length
+    const nCount = sampleValues.filter(v => /^N\d+$/i.test(v)).length
+    const totalCount = jCount + pCount + tCount + rCount + nCount
+    if (totalCount > sampleValues.length * 0.5) {
+      if (jCount >= pCount && jCount >= tCount) {
+        fingerprintHints.push({ field: 'id', reason: 'junction_id_prefix', strength: 0.95 })
+      } else if (pCount >= jCount && pCount >= tCount) {
+        fingerprintHints.push({ field: 'id', reason: 'pipe_id_prefix', strength: 0.95 })
+      } else if (tCount >= jCount && tCount >= pCount) {
+        fingerprintHints.push({ field: 'id', reason: 'tank_id_prefix', strength: 0.95 })
+      } else if (rCount >= jCount && rCount >= pCount) {
+        fingerprintHints.push({ field: 'id', reason: 'reservoir_id_prefix', strength: 0.95 })
+      } else if (nCount >= jCount && nCount >= pCount) {
+        fingerprintHints.push({ field: 'id', reason: 'junction_id_prefix', strength: 0.95 })
+      }
+    }
   }
 
   if (stats.numericRatio > 0.7) {
@@ -405,18 +426,28 @@ function fingerprintColumn(colValues, header) {
       fingerprintHints.push({ field: 'demand', reason: 'small_non_negative_0_1', strength: 0.5 })
       fingerprintHints.push({ field: 'pattern_multiplier', reason: 'multiplier_range', strength: 0.4 })
     }
-    if (stats.min !== null && stats.min >= -100 && stats.max <= 200 && stats.mean > 20) {
-      fingerprintHints.push({ field: 'roughness', reason: 'roughness_range', strength: 0.4 })
-      fingerprintHints.push({ field: 'elevation', reason: 'elevation_range', strength: 0.3 })
-    }
-    if (stats.min !== null && stats.min >= 10 && stats.max <= 3000 && stats.mean > 50) {
-      fingerprintHints.push({ field: 'diameter', reason: 'pipe_diameter_range', strength: 0.5 })
-    }
-    if (stats.min !== null && stats.min > 100 && stats.max < 100000) {
-      fingerprintHints.push({ field: 'length', reason: 'large_positive_distance', strength: 0.5 })
-    }
-    if (stats.min !== null && stats.min >= 0 && stats.mean > 500) {
-      fingerprintHints.push({ field: 'elevation', reason: 'high_elevation_values', strength: 0.5 })
+    // Elevation: typically positive values under 500 (elevations are usually 0-300m)
+    // Roughness: typically Hazen-Williams values (50-200) with mean often 100-150
+    // Diameter: typically 10-3000mm
+    // Length: typically 100-100000mm
+    if (stats.min !== null && stats.max !== null) {
+      // Elevation detection: mean > 10 but max < 500 (to exclude diameter/length)
+      if (stats.mean > 10 && stats.max < 500) {
+        fingerprintHints.push({ field: 'elevation', reason: 'elevation_range', strength: 0.5 })
+      }
+      // Roughness detection: mean > 50 and max < 200 and min > 50
+      if (stats.mean > 50 && stats.max < 200 && stats.min > 50) {
+        fingerprintHints.push({ field: 'roughness', reason: 'roughness_range', strength: 0.45 })
+      }
+      if (stats.min >= 10 && stats.max <= 3000 && stats.mean > 50) {
+        fingerprintHints.push({ field: 'diameter', reason: 'pipe_diameter_range', strength: 0.5 })
+      }
+      if (stats.min > 100 && stats.max < 100000) {
+        fingerprintHints.push({ field: 'length', reason: 'large_positive_distance', strength: 0.5 })
+      }
+      if (stats.min !== null && stats.min >= 0 && stats.mean > 500) {
+        fingerprintHints.push({ field: 'elevation', reason: 'high_elevation_values', strength: 0.5 })
+      }
     }
   }
 
@@ -476,6 +507,60 @@ function buildColumnMappings(headers, rows) {
             matchedSynonym: match[0].synonym,
             fpHint: fpHint?.reason || null,
           })
+        }
+      }
+    }
+
+    // Use fingerprint hints as fallback for ID field when no synonym match
+    if (matchResults.length === 0) {
+      for (const fpHint of fp.fingerprintHints) {
+        // ID prefix hints indicate the element type - add match results for all sections
+        if (fpHint.field === 'id' && fpHint.strength > 0.5) {
+          const idPrefix = fpHint.reason.includes('_id_prefix') ? fpHint.reason.replace('_id_prefix', '') : null
+          for (const sectionKey of DETECTABLE_SECTIONS) {
+            const schema = EPANET_SCHEMA[sectionKey]
+            if (schema?.synonyms?.id) {
+              // Boost score based on ID prefix match
+              let boostedStrength = fpHint.strength * 0.4
+              if (idPrefix) {
+                const sectionPrefix = {
+                  junction: 'JUNCTIONS',
+                  pipe: 'PIPES',
+                  tank: 'TANKS',
+                  reservoir: 'RESERVOIRS'
+                }[idPrefix]
+                if (sectionKey === sectionPrefix) {
+                  boostedStrength = fpHint.strength * 0.9
+                }
+              }
+              matchResults.push({
+                section: sectionKey,
+                field: 'id',
+                nameScore: 0,
+                fpBoost: fpHint.strength,
+                combinedScore: boostedStrength,
+                matchedSynonym: null,
+                fpHint: fpHint.reason,
+              })
+            }
+          }
+        }
+        // Other fingerprint hints
+        else if (schema?.synonyms?.hasOwnProperty(fpHint.field) && fpHint.strength > 0.5) {
+          for (const sectionKey of DETECTABLE_SECTIONS) {
+            const schema = EPANET_SCHEMA[sectionKey]
+            if (schema?.synonyms?.[fpHint.field]) {
+              matchResults.push({
+                section: sectionKey,
+                field: fpHint.field,
+                nameScore: 0,
+                fpBoost: fpHint.strength,
+                combinedScore: fpHint.strength * 0.4,
+                matchedSynonym: null,
+                fpHint: fpHint.reason,
+              })
+            }
+          }
         }
       }
     }
@@ -583,35 +668,41 @@ export function mapCsvToEpanetData(parsed, mapping, detectedType) {
     const idx = headers.findIndex(h => h.toLowerCase() === csvHeader.toLowerCase())
     if (idx >= 0) colMap[field] = idx
   }
+  // Find unmapped columns for extra data
+  const mappedIndices = new Set(Object.values(colMap))
+  const extraColIndices = headers.map((h, i) => i).filter(i => !mappedIndices.has(i) && !isJunkColumn(rows, headers[i]))
   const result = { junctions: [], pipes: [], valves: [], pumps: [], tanks: [], reservoirs: [], coordinates: [] }
   for (const row of rows) {
     const get = (f) => { const i = colMap[f]; return i !== undefined ? (row[headers[i]] || '') : '' }
     const num = (f) => { const v = get(f); return v ? Number(v) : 0 }
     const str = (f) => get(f) || ''
+    // Collect extra data from unmapped columns
+    const extraData = extraColIndices.map(i => (row[headers[i]] || '').replace(/;+$/, '').trim()).filter(v => v !== '')
+    const comment = extraData.join(' ') || ''
     if (detectedType === 'JUNCTIONS') {
       const id = str('id') || `J${result.junctions.length + 1}`
-      const j = { id, elevation: num('elevation'), demand: num('demand'), pattern: str('pattern') }
+      const j = { id, elevation: num('elevation'), demand: num('demand'), pattern: str('pattern'), comment }
       const x = num('x'), y = num('y')
       if (x && y) result.coordinates.push({ id, x, y })
       result.junctions.push(j)
     } else if (detectedType === 'PIPES') {
       const id = str('id') || `P${result.pipes.length + 1}`
       const n1 = str('node1'), n2 = str('node2')
-      if (n1 && n2) result.pipes.push({ id, node1: n1, node2: n2, length: num('length'), diameter: num('diameter'), roughness: num('roughness') || 140, minorLoss: num('minorLoss'), status: str('status') || 'Open' })
+      if (n1 && n2) result.pipes.push({ id, node1: n1, node2: n2, length: num('length'), diameter: num('diameter'), roughness: num('roughness') || 140, minorLoss: num('minorLoss'), status: str('status') || 'Open', comment })
     } else if (detectedType === 'RESERVOIRS') {
       const id = str('id') || `R${result.reservoirs.length + 1}`
-      result.reservoirs.push({ id, head: num('head'), pattern: str('pattern') })
+      result.reservoirs.push({ id, head: num('head'), pattern: str('pattern'), comment })
     } else if (detectedType === 'TANKS') {
       const id = str('id') || `T${result.tanks.length + 1}`
-      result.tanks.push({ id, elevation: num('elevation'), initLevel: num('initLevel'), minLevel: num('minLevel'), maxLevel: num('maxLevel'), diameter: num('diameter'), minVol: num('minVol'), volCurve: str('volCurve') })
+      result.tanks.push({ id, elevation: num('elevation'), initLevel: num('initLevel'), minLevel: num('minLevel'), maxLevel: num('maxLevel'), diameter: num('diameter'), minVol: num('minVol'), volCurve: str('volCurve'), comment })
     } else if (detectedType === 'PUMPS') {
       const id = str('id') || `PU${result.pumps.length + 1}`
       const n1 = str('node1'), n2 = str('node2')
-      if (n1 && n2) result.pumps.push({ id, node1: n1, node2: n2, parameters: str('parameters'), curve: str('curve'), pattern: str('pattern') })
+      if (n1 && n2) result.pumps.push({ id, node1: n1, node2: n2, parameters: str('parameters'), curve: str('curve'), pattern: str('pattern'), comment })
     } else if (detectedType === 'VALVES') {
       const id = str('id') || `V${result.valves.length + 1}`
       const n1 = str('node1'), n2 = str('node2')
-      if (n1 && n2) result.valves.push({ id, node1: n1, node2: n2, diameter: num('diameter'), type: str('type') || 'PRV', setting: num('setting'), minorLoss: num('minorLoss') })
+      if (n1 && n2) result.valves.push({ id, node1: n1, node2: n2, diameter: num('diameter'), type: str('type') || 'PRV', setting: num('setting'), minorLoss: num('minorLoss'), comment })
     }
   }
   return result

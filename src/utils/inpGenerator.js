@@ -9,7 +9,9 @@ function fmtNum(v, decimals = 4) {
 }
 
 function fmtLine(parts) {
-  return parts.join('\t')
+  const last = parts[parts.length - 1]
+  const comment = (last && typeof last === 'string' && last.startsWith(';')) ? '' : '\t;'
+  return parts.join('\t') + comment
 }
 
 export function generateInp(mappedData) {
@@ -65,12 +67,14 @@ export function generateInp(mappedData) {
   sections.push('[JUNCTIONS]')
   sections.push(';ID\tElevation\tDemand\tPattern')
   for (const j of junctions) {
-    sections.push(fmtLine([
+    const parts = [
       j.id,
       fmtNum(j.elevation, 3),
       fmtNum(j.demand || 0, 6),
       j.pattern || '',
-    ]))
+    ]
+    if (j.comment) parts.push(`;${j.comment}`)
+    sections.push(fmtLine(parts))
   }
   sections.push('')
 
@@ -78,11 +82,13 @@ export function generateInp(mappedData) {
     sections.push('[RESERVOIRS]')
     sections.push(';ID\tHead\tPattern')
     for (const r of reservoirs) {
-      sections.push(fmtLine([
+      const parts = [
         r.id,
         fmtNum(r.head, 3),
         r.pattern || '',
-      ]))
+      ]
+      if (r.comment) parts.push(`;${r.comment}`)
+      sections.push(fmtLine(parts))
     }
     sections.push('')
   }
@@ -91,7 +97,7 @@ export function generateInp(mappedData) {
     sections.push('[TANKS]')
     sections.push(';ID\tElevation\tInitLevel\tMinLevel\tMaxLevel\tDiameter\tMinVol\tVolCurve')
     for (const t of tanks) {
-      sections.push(fmtLine([
+      const parts = [
         t.id,
         fmtNum(t.elevation, 3),
         fmtNum(t.initLevel, 3),
@@ -100,7 +106,9 @@ export function generateInp(mappedData) {
         fmtNum(t.diameter, 3),
         fmtNum(t.minVol || 0, 3),
         t.volCurve || '',
-      ]))
+      ]
+      if (t.comment) parts.push(`;${t.comment}`)
+      sections.push(fmtLine(parts))
     }
     sections.push('')
   }
@@ -108,7 +116,7 @@ export function generateInp(mappedData) {
   sections.push('[PIPES]')
   sections.push(';ID\tNode1\tNode2\tLength\tDiameter\tRoughness\tMinorLoss\tStatus')
   for (const p of pipes) {
-    sections.push(fmtLine([
+    const parts = [
       p.id,
       p.node1,
       p.node2,
@@ -117,7 +125,9 @@ export function generateInp(mappedData) {
       fmtNum(p.roughness || 140, 1),
       fmtNum(p.minorLoss || 0, 4),
       p.status || 'Open',
-    ]))
+    ]
+    if (p.comment) parts.push(`;${p.comment}`)
+    sections.push(fmtLine(parts))
   }
   sections.push('')
 
@@ -128,13 +138,15 @@ export function generateInp(mappedData) {
       const params = p.parameters || ''
       const curveRef = p.curve || ''
       const patternRef = p.pattern || ''
-      sections.push(fmtLine([
+      const parts = [
         p.id,
         p.node1,
         p.node2,
         params,
         curveRef || patternRef,
-      ]))
+      ]
+      if (p.comment) parts.push(`;${p.comment}`)
+      sections.push(fmtLine(parts))
     }
     sections.push('')
   }
@@ -143,7 +155,7 @@ export function generateInp(mappedData) {
     sections.push('[VALVES]')
     sections.push(';ID\tNode1\tNode2\tDiameter\tType\tSetting\tMinorLoss')
     for (const v of valves) {
-      sections.push(fmtLine([
+      const parts = [
         v.id,
         v.node1,
         v.node2,
@@ -151,7 +163,9 @@ export function generateInp(mappedData) {
         v.type || 'PRV',
         fmtNum(v.setting || 0, 1),
         fmtNum(v.minorLoss || 0, 4),
-      ]))
+      ]
+      if (v.comment) parts.push(`;${v.comment}`)
+      sections.push(fmtLine(parts))
     }
     sections.push('')
   }
