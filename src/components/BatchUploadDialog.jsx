@@ -102,6 +102,7 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
 
   const handleNext = useCallback(() => {
     setShowMapping(false)
+    if (fileStates[activeIndex]?.status !== 'validated') updateFile(activeIndex, { status: 'validated' })
     const nx = findNext(activeIndex)
     if (nx >= 0) {
       setActiveIndex(nx)
@@ -109,7 +110,7 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
     } else {
       buildAndDownload()
     }
-  }, [activeIndex, fileStates, findNext, buildAndDownload])
+  }, [activeIndex, fileStates, findNext, buildAndDownload, updateFile])
 
   const handlePrev = useCallback(() => { const p = findPrev(activeIndex); if (p >= 0) { setActiveIndex(p); setShowMapping(false) } }, [activeIndex, findPrev])
 
