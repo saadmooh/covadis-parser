@@ -57,12 +57,25 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
 
   const buildAndDownload = useCallback(async () => {
     const { generateInp } = await import('../utils/inpGenerator.js')
+    const { suggestMappingsForType: suggest } = await import('../utils/csvAutoDetector.js')
     const all = { junctions: [], pipes: [], valves: [], pumps: [], tanks: [], reservoirs: [], coordinates: [], patterns: [], curves: [], controls: [], status: [] }
     for (const e of fileStates) {
       if (e.status !== 'validated') continue
       let d = EMPTY
       if (e.isMultiSection && e.multiData) d = e.multiData
-      else if (e.mapping && e.rawContent) { const p = parseCsvText(e.rawContent); if (p) { const k = e.selectedType || e.detectedType; d = mapCsvToEpanetData(p, e.mapping[k] || e.mapping, k) } }
+      else if (e.rawContent) {
+        const p = parseCsvText(e.rawContent)
+        if (p) {
+          const typeKey = e.selectedType || e.detectedType
+          let mapping = e.mapping?.[typeKey] || e.mapping
+          if (!mapping || Object.keys(mapping).length === 0) {
+            const suggestions = suggest(p.headers, p.rows, typeKey)
+            mapping = {}
+            for (const s of suggestions) { if (s.field) mapping[s.header] = s.field }
+          }
+          if (mapping && Object.keys(mapping).length > 0) d = mapCsvToEpanetData(p, mapping, typeKey)
+        }
+      }
       for (const k of Object.keys(all)) { if (Array.isArray(d[k])) all[k] = all[k].concat(d[k]); else if (typeof d[k] === 'object' && d[k] !== null) Object.assign(all[k], d[k]) }
     }
     all.title = 'Batch Generated from CSV Files'
