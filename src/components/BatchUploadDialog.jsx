@@ -98,7 +98,11 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
   }, [activeIndex, fileStates, updateFile, findNext])
 
   const handleMappingCancel = useCallback(() => { setShowMapping(false) }, [])
-  const handleMappingStateChange = useCallback((s) => { updateFile(activeIndex, { mapping: s.mapping, selectedType: s.selectedType }) }, [activeIndex, updateFile])
+  const handleMappingStateChange = useCallback((s) => {
+    const update = { mapping: s.mapping, selectedType: s.selectedType }
+    if (fileStates[activeIndex]?.status !== 'validated') update.status = 'type_selected'
+    updateFile(activeIndex, update)
+  }, [activeIndex, updateFile, fileStates])
 
   const handleNext = useCallback(() => {
     setShowMapping(false)
@@ -107,10 +111,8 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
     if (nx >= 0) {
       setActiveIndex(nx)
       if (!fileStates[nx].isMultiSection) setTimeout(() => setShowMapping(true), 50)
-    } else {
-      buildAndDownload()
     }
-  }, [activeIndex, fileStates, findNext, buildAndDownload, updateFile])
+  }, [activeIndex, fileStates, findNext, updateFile])
 
   const handlePrev = useCallback(() => { const p = findPrev(activeIndex); if (p >= 0) { setActiveIndex(p); setShowMapping(false) } }, [activeIndex, findPrev])
 
@@ -178,9 +180,17 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
         </div>
         <div style={STYLE.nav}>
           <button onClick={handlePrev} disabled={!canPrev} style={{ ...STYLE.btn('secondary'), opacity: canPrev ? 1 : 0.4 }}>← Previous</button>
-          <button onClick={isLastStep ? buildAndDownload : handleNext} style={{ ...STYLE.btn(isLastStep ? 'primary' : 'info') }}>
-            {isLastStep ? '✅ Finish Review & Generate EPANET Project' : 'Next →'}
-          </button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {!allDone && <span style={{ fontSize: 11, color: '#856404' }}>{vCount}/{files.length} files reviewed</span>}
+            {isLastStep && allDone && (
+              <button onClick={buildAndDownload} style={STYLE.btn('primary')}>
+                ✅ Generate EPANET .inp
+              </button>
+            )}
+            {!isLastStep && (
+              <button onClick={handleNext} style={STYLE.btn('info')}>Next →</button>
+            )}
+          </div>
         </div>
       </div>
       {showMapping && active && !active.isMultiSection && active.rawContent && (
