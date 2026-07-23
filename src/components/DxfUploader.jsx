@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState, useEffect } from 'react'
 import CsvMappingDialog from './CsvMappingDialog'
 import BatchUploadDialog from './BatchUploadDialog'
+import { t } from '../utils/translations.js'
 
 export default function DxfUploader({ onData, onConfirmToProject, projectMode, lang = 'en' }) {
   const inputRef = useRef(null)
@@ -376,25 +377,23 @@ export default function DxfUploader({ onData, onConfirmToProject, projectMode, l
             </div>
             {hasQueue ? (
               <p className="upload-text">
-                📋 {fileQueue.length} ملفات CSV — المعالجة: {queueIndex + 1}/{fileQueue.length}
+                {t(lang, 'csvProcessing', queueIndex + 1, fileQueue.length)}
               </p>
             ) : (
               <p className="upload-text">
                 {fileName
-                  ? `Fichier: ${fileName}`
+                  ? t(lang, 'fileLabel', fileName)
                   : projectMode
-                    ? 'Glissez-déposez ملفات DXF, JSON أو CSV — أو اختر ملفاً/عدة ملفات'
-                    : 'Glissez-déposez un fichier DXF, JSON ou CSV ici'}
+                    ? t(lang, 'dragDropMulti')
+                    : t(lang, 'dragDrop')}
               </p>
             )}
             <p className="upload-sub">ou</p>
             <button className="upload-btn" onClick={() => inputRef.current?.click()}>
-              {projectMode ? 'اختر ملفات' : 'Choisir un fichier DXF / JSON / CSV'}
+              {projectMode ? t(lang, 'chooseFiles') : t(lang, 'chooseFile')}
             </button>
             <p className="upload-sub" style={{marginTop: 8, fontSize: '0.75rem'}}>
-              {projectMode
-                ? 'يمكنك اختيار عدة ملفات CSV دفعة واحدة'
-                : 'Fichiers multiples supportés'}
+              {t(lang, 'multiFilesSupported')}
             </p>
           </>
         )}
