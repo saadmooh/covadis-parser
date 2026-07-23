@@ -41,7 +41,7 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
           e.rawContent = t
           e.isMultiSection = isMultiSectionCsv(t)
           if (e.isMultiSection) { e.multiData = parseMultiSectionCsv(t); e.status = 'validated'; e.detectedType = 'MULTI'; e.detectedConfidence = 0.98 }
-          else { const { parseCsvText: parse, detectTableType } = await import('../utils/csvAutoDetector.js'); const p = parse(t); if (p) { const d = detectTableType(p.headers, p.rows); e.detectedType = d.detectedType; e.detectedConfidence = d.confidence; e.status = d.confidence >= 0.75 ? 'type_selected' : 'type_needed' } else e.status = 'type_needed' }
+          else { const { parseCsvText: parse, detectTableType, suggestMappingsForType } = await import('../utils/csvAutoDetector.js'); const p = parse(t); if (p) { const d = detectTableType(p.headers, p.rows); e.detectedType = d.detectedType; e.detectedConfidence = d.confidence; if (d.confidence >= 0.75 && d.detectedType) { const suggestions = suggestMappingsForType(p.headers, p.rows, d.detectedType); const mapping = {}; for (const s of suggestions) { if (s.field) mapping[s.header] = s.field; } e.mapping = mapping; } e.status = d.confidence >= 0.75 ? 'type_selected' : 'type_needed' } else e.status = 'type_needed' }
         } catch { e.status = 'type_needed' }
       }
       if (!off) { setFileStates(u); setPreprocessing(false); const f = u.findIndex(x => x.status !== 'validated' && !x.isMultiSection); if (f >= 0) setActiveIndex(f) }
