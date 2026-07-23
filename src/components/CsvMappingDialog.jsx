@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react'
 import { EPANET_SCHEMA, getRequiredFields } from '../utils/schemaDictionary.js'
 import { detectTableType, parseCsvText, isMultiSectionCsv, parseMultiSectionCsv, suggestMappingsForType } from '../utils/csvAutoDetector.js'
 import { validateColumnAssignment } from '../utils/fieldValidator.js'
+import { t } from '../utils/translations.js'
 
 const STYLE = {
   overlay: {
@@ -84,7 +85,7 @@ const SIMPLE_FIELDS = {
   TAGS: ['objectType', 'id', 'tag'],
 }
 
-export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectMode, initialMapping, onStateChange, batchMode, onNext }) {
+export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectMode, initialMapping, onStateChange, batchMode, onNext, lang = 'en' }) {
   const [fieldMappings, setFieldMappings] = useState(initialMapping || {})
   const [showPreview, setShowPreview] = useState(true)
   const [expandedSection, setExpandedSection] = useState(null)
@@ -179,7 +180,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
   const handleTypeChange = useCallback((newType) => {
     setSelectedType(newType)
     setFieldMappings({})
-    setNotification(newType ? `Suggestions updated for new type (${TYPE_LABELS[newType] || newType})` : null)
+    setNotification(newType ? `Suggestions updated for new type (${t(lang, newType) || newType})` : null)
     setTimeout(() => setNotification(null), 3000)
   }, [])
 
@@ -284,9 +285,9 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
     if (currentType === 'CONTROLS') {
       return (
         <div style={{ padding: 16, background: '#f8f9fa', borderRadius: 6, border: '1px solid #e9ecef' }}>
-          <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>Control Rules (CONTROLS)</h4>
+          <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>{t(lang, 'controlRulesTitle')}</h4>
           <p style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
-            This section contains full control texts that cannot be broken into columns. Each row represents one rule.
+            {t(lang, 'controlDesc')}
           </p>
           {parsed?.rows.slice(0, 5).map((row, i) => {
             const vals = Object.values(row).filter(v => v && v !== ';').join(',').trim()
@@ -298,9 +299,9 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
     if (currentType === 'LABELS') {
       return (
         <div style={{ padding: 16, background: '#f8f9fa', borderRadius: 6, border: '1px solid #e9ecef' }}>
-          <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>Text Labels (LABELS)</h4>
+          <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>{t(lang, 'textLabelsTitle')}</h4>
           <p style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
-            Each label: X, Y, "text", reference_id (optional). Merged automatically with elements.
+            {t(lang, 'textLabelsDesc')}
           </p>
           {parsed?.rows.slice(0, 5).map((row, i) => {
             const vals = Object.values(row).slice(1).join(' ').trim()
@@ -318,7 +319,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
         <div style={STYLE.dialog} onClick={(e) => e.stopPropagation()}>
           <div style={STYLE.header}>
             <div>
-              <h3 style={{ margin: 0, fontSize: 16 }}>Unified flat file — Auto-detected with high confidence</h3>
+              <h3 style={{ margin: 0, fontSize: 16 }}>{t(lang, 'unifiedTitle')}</h3>
               <p style={{ margin: '4px 0 0', fontSize: 12, color: '#6c757d' }}>
                 {parsed ? `${parsed.rows.length} rows | Key element column: "Section"` : ''}
               </p>
@@ -333,7 +334,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                 <span style={{ color: '#6c757d' }}>({multiData.junctions.length} rows)</span>
                 {confidenceBadge(0.98)}
                 <span style={{ flex: 1 }} />
-                <span style={{ fontSize: 11, color: '#28a745' }}>Auto-detected</span>
+                <span style={{ fontSize: 11, color: '#28a745' }}>{t(lang, 'autoDetectedLabel')}</span>
               </div>
             )}
             {expandedSection === 'JUNCTIONS' && (
@@ -368,7 +369,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                 <span style={{ color: '#6c757d' }}>({multiData.pipes.length} rows)</span>
                 {confidenceBadge(0.96)}
                 <span style={{ flex: 1 }} />
-                <span style={{ fontSize: 11, color: '#28a745' }}>Auto-detected</span>
+                <span style={{ fontSize: 11, color: '#28a745' }}>{t(lang, 'autoDetectedLabel')}</span>
               </div>
             )}
             {expandedSection === 'PIPES' && (
@@ -408,7 +409,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                     <span style={{ color: '#6c757d' }}>({items.length} rows)</span>
                     {confidenceBadge(0.95)}
                     <span style={{ flex: 1 }} />
-                    <span style={{ fontSize: 11, color: '#28a745' }}>Auto-detected</span>
+                    <span style={{ fontSize: 11, color: '#28a745' }}>{t(lang, 'autoDetectedLabel')}</span>
                   </div>
                   {expandedSection === section && (
                     <div style={{ padding: '8px 12px 12px', background: '#f8fffe', borderRadius: 6, marginBottom: 4, border: '1px solid #d4edda' }}>
@@ -435,7 +436,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                 <span style={{ color: '#6c757d' }}>({multiData.patterns.length} rows → {multiData.sectionSummary.PATTERNS?.groupedCount || '?'} patterns)</span>
                 {confidenceBadge(0.97)}
                 <span style={{ flex: 1 }} />
-                <span style={{ fontSize: 11, color: '#28a745' }}>Auto-detected</span>
+                <span style={{ fontSize: 11, color: '#28a745' }}>{t(lang, 'autoDetectedLabel')}</span>
               </div>
             )}
             {expandedSection === 'PATTERNS' && (
@@ -460,7 +461,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                 <span style={{ color: '#6c757d' }}>({multiData.curves.length} rows → {multiData.sectionSummary.CURVES?.groupedCount || '?'} curves)</span>
                 {confidenceBadge(0.95)}
                 <span style={{ flex: 1 }} />
-                <span style={{ fontSize: 11, color: '#28a745' }}>Auto-detected</span>
+                <span style={{ fontSize: 11, color: '#28a745' }}>{t(lang, 'autoDetectedLabel')}</span>
               </div>
             )}
             {expandedSection === 'CURVES' && (
@@ -508,7 +509,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
             {Object.keys(multiData.options).length > 0 && (
               <div style={STYLE.sectionRow(expandedSection === 'OPTIONS')} onClick={() => setExpandedSection(expandedSection === 'OPTIONS' ? null : 'OPTIONS')}>
                 <span>{expandedSection === 'OPTIONS' ? '▼' : '▶'}</span>
-                <span style={{ fontWeight: 600 }}>⚙️ General Settings</span>
+                <span style={{ fontWeight: 600 }}>⚙️ {t(lang, 'generalSettings')}</span>
                 <span style={{ color: '#6c757d' }}>(OPTIONS/TIMES)</span>
               </div>
             )}
@@ -530,7 +531,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
             {multiData.junkColumns?.length > 0 && (
               <div style={STYLE.sectionRow(false)}>
                 <span>🗑️</span>
-                <span style={{ fontWeight: 600 }}>Ignored columns</span>
+                <span style={{ fontWeight: 600 }}>{t(lang, 'ignoredColumns')}</span>
                 <span style={{ color: '#6c757d' }}>({multiData.junkColumns.length} columns — junk/empty)</span>
               </div>
             )}
@@ -553,9 +554,9 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
           </div>
 
           <div style={STYLE.footer}>
-            <button onClick={onCancel} style={STYLE.btn('secondary')}>Cancel</button>
+            <button onClick={onCancel} style={STYLE.btn('secondary')}>{t(lang, 'cancel')}</button>
             <button onClick={handleConfirm} style={STYLE.btn('primary')}>
-              Confirm and Generate .inp ({multiData.junctions.length + multiData.pipes.length + multiData.valves.length + multiData.pumps.length + multiData.tanks.length + multiData.reservoirs.length} elements)
+              {t(lang, 'confirmGenerateCount', multiData.junctions.length + multiData.pipes.length + multiData.valves.length + multiData.pumps.length + multiData.tanks.length + multiData.reservoirs.length)}
             </button>
           </div>
         </div>
@@ -568,9 +569,9 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
       <div style={STYLE.dialog} onClick={(e) => e.stopPropagation()}>
         <div style={STYLE.header}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 16 }}>Map CSV columns to EPANET elements</h3>
+            <h3 style={{ margin: 0, fontSize: 16 }}>{t(lang, 'mapCsvTitle')}</h3>
             <p style={{ margin: '4px 0 0', fontSize: 12, color: '#6c757d' }}>
-              {parsed ? `${parsed.rows.length} rows | ${parsed.headers.length} columns` : ''}
+              {parsed ? t(lang, 'rowsCols', parsed.rows.length, parsed.headers.length) : ''}
             </p>
           </div>
         </div>
@@ -578,9 +579,9 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
         <div style={STYLE.body}>
           <div style={{ marginBottom: 16, padding: '12px 16px', background: '#f0f4f8', borderRadius: 8, border: '1px solid #d0d7de' }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#333' }}>
-              Element Type {!currentType && <span style={{ color: '#dc3545', fontWeight: 400 }}>* Please select</span>}
+              {t(lang, 'elementType')} {!currentType && <span style={{ color: '#dc3545', fontWeight: 400 }}>* {t(lang, 'pleaseSelect')}</span>}
               {isHighConfidence && !selectedType && (
-                <span style={{ fontSize: 11, color: '#28a745', fontWeight: 400, marginRight: 8 }}>🔍 Auto-detected with confidence {(confidence * 100).toFixed(0)}%</span>
+                <span style={{ fontSize: 11, color: '#28a745', fontWeight: 400, marginRight: 8 }}>🔍 {t(lang, 'autoDetected', (confidence * 100).toFixed(0))}</span>
               )}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -590,9 +591,9 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                   onClick={() => handleTypeChange(type)}
                   style={STYLE.chip(currentType === type, isHighConfidence && detectedType === type && !selectedType)}
                 >
-                  {TYPE_LABELS[type]}
+                  {t(lang, type)}
                   {isHighConfidence && detectedType === type && !selectedType && (
-                    <span style={{ fontSize: 10, opacity: 0.8 }}>auto</span>
+                    <span style={{ fontSize: 10, opacity: 0.8 }}>{t(lang, 'auto')}</span>
                   )}
                 </button>
               ))}
@@ -605,7 +606,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
 
           {!currentType && (
             <div style={{ padding: 20, textAlign: 'center', color: '#856404', background: '#fff3cd', borderRadius: 6, fontSize: 13 }}>
-              Could not determine data type with sufficient confidence — Please select an element type above
+              {t(lang, 'cannotDetermine')}
             </div>
           )}
 
@@ -616,21 +617,21 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                   <h4 style={{ margin: 0, fontSize: 14, color: '#333' }}>
-                    Column Mapping — {TYPE_LABELS[currentType]}
+                    {t(lang, 'columnMapping')} — {t(lang, currentType)}
                   </h4>
                   {!isSimpleType(currentType) && (
                     <button
                       onClick={() => setShowPreview(!showPreview)}
                       style={{ fontSize: 11, color: '#2c7bb6', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
                     >
-                      {showPreview ? 'Hide Preview' : 'Show Preview'}
+                      {showPreview ? t(lang, 'hidePreview') : t(lang, 'showPreview')}
                     </button>
                   )}
                 </div>
 
                 {isSimpleType(currentType) && (
                   <div style={{ fontSize: 12, color: '#6c757d', marginBottom: 8, padding: '6px 10px', background: '#e8f4fd', borderRadius: 4 }}>
-                    Attachment — merged with existing elements via ID
+                    {t(lang, 'attachmentMerged')}
                   </div>
                 )}
 
@@ -641,7 +642,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                     color: allRequiredMet ? '#155724' : '#721c24',
                     border: `1px solid ${allRequiredMet ? '#c3e6cb' : '#f5c6cb'}`,
                   }}>
-                    Required fields: {mappedRequiredCount}/{requiredFields.length}
+                    {t(lang, 'requiredFieldsLabel')}: {mappedRequiredCount}/{requiredFields.length}
                     {!allRequiredMet && (
                       <span> — Missing: {requiredFields.filter(f => !Object.values(mergedMappings).some(m => m && m.field === f && !m.ignored && m.section === currentType)).join(', ')}</span>
                     )}
@@ -651,12 +652,12 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                 <table style={STYLE.table}>
                   <thead>
                     <tr>
-                      <th style={STYLE.th}>CSV Column</th>
-                      <th style={STYLE.th}>Detected Field</th>
-                      <th style={STYLE.th}>Confidence</th>
-                      <th style={STYLE.th}>Validation</th>
-                      <th style={STYLE.th}>Manual Assignment</th>
-                      <th style={STYLE.th}>Actions</th>
+                      <th style={STYLE.th}>{t(lang, 'csvColumn')}</th>
+                      <th style={STYLE.th}>{t(lang, 'detectedField')}</th>
+                      <th style={STYLE.th}>{t(lang, 'confidence')}</th>
+                      <th style={STYLE.th}>{t(lang, 'validation')}</th>
+                      <th style={STYLE.th}>{t(lang, 'manualAssignment')}</th>
+                      <th style={STYLE.th}>{t(lang, 'actions')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -678,7 +679,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                             {match?.field && !isIgnored ? (
                               <span style={{ fontWeight: 600, fontSize: 13 }}>{match.field}</span>
                             ) : (
-                              <span style={{ color: '#999', fontSize: 12 }}>{isIgnored ? 'Ignore' : '—'}</span>
+                              <span style={{ color: '#999', fontSize: 12 }}>{isIgnored ? t(lang, 'ignore') : '—'}</span>
                             )}
                           </td>
                           <td style={STYLE.td}>
@@ -712,7 +713,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                               }}
                               style={STYLE.select}
                             >
-                              <option value="">-- Select --</option>
+                              <option value="">{t(lang, 'selectField')}</option>
                               {Object.entries(allFieldOptions).map(([field]) => (
                                 <option key={field} value={field}>{field}</option>
                               ))}
@@ -721,11 +722,11 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                           <td style={STYLE.td}>
                             {isIgnored ? (
                               <button onClick={() => handleUnignore(header, currentType)} style={{ fontSize: 11, color: '#2c7bb6', background: 'none', border: 'none', cursor: 'pointer' }}>
-                                Restore
+                                {t(lang, 'restore')}
                               </button>
                             ) : match?.field ? (
                               <button onClick={() => handleIgnore(header, currentType)} style={{ fontSize: 11, color: '#dc3545', background: 'none', border: 'none', cursor: 'pointer' }}>
-                                Ignore
+                                {t(lang, 'ignore')}
                               </button>
                             ) : null}
                           </td>
@@ -738,7 +739,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
 
               {showPreview && !isSimpleType(currentType) && (
                 <div>
-                  <h4 style={{ margin: '0 0 12px', fontSize: 14, color: '#333' }}>Data Preview</h4>
+                  <h4 style={{ margin: '0 0 12px', fontSize: 14, color: '#333' }}>{t(lang, 'dataPreview')}</h4>
                   <div style={{ overflowX: 'auto', border: '1px solid #e0e0e0', borderRadius: 6 }}>
                     <table style={STYLE.previewTable}>
                       <thead>
@@ -772,19 +773,19 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
         </div>
 
         <div style={STYLE.footer}>
-          <button onClick={onCancel} style={STYLE.btn('secondary')}>Cancel</button>
+          <button onClick={onCancel} style={STYLE.btn('secondary')}>{t(lang, 'cancel')}</button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {!currentType && (
-              <span style={{ fontSize: 11, color: '#dc3545' }}>Select element type first</span>
+              <span style={{ fontSize: 11, color: '#dc3545' }}>{t(lang, 'selectTypeFirst')}</span>
             )}
             {currentType && !allRequiredMet && !isSpecialType(currentType) && (
-              <span style={{ fontSize: 11, color: '#856404' }}>Please map all required fields</span>
+              <span style={{ fontSize: 11, color: '#856404' }}>{t(lang, 'mapRequired')}</span>
             )}
             {overallValidation.severity === 'blocking' && (
-              <span style={{ fontSize: 11, color: '#dc3545' }}>🔴 Validation errors ({overallValidation.totalErrors})</span>
+              <span style={{ fontSize: 11, color: '#dc3545' }}>🔴 {t(lang, 'validationErrors', overallValidation.totalErrors)}</span>
             )}
             {overallValidation.severity === 'warning' && (
-              <span style={{ fontSize: 11, color: '#856404' }}>🟡 Warnings ({overallValidation.totalWarnings})</span>
+              <span style={{ fontSize: 11, color: '#856404' }}>🟡 {t(lang, 'warningsCount', overallValidation.totalWarnings)}</span>
             )}
             {!batchMode && (
               <button
@@ -792,7 +793,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                 disabled={!currentType || (!allRequiredMet && !isSpecialType(currentType)) || overallValidation.severity === 'blocking'}
                 style={{ ...STYLE.btn('primary'), opacity: currentType && (allRequiredMet || isSpecialType(currentType)) && overallValidation.severity !== 'blocking' ? 1 : 0.5, cursor: currentType ? 'pointer' : 'not-allowed' }}
               >
-                Confirm {projectMode ? 'and Add to Project' : 'and Generate .inp'}
+                {projectMode ? t(lang, 'confirmProject') : t(lang, 'confirmAndGenerate')}
               </button>
             )}
             {batchMode && (
@@ -803,7 +804,7 @@ export default function CsvMappingDialog({ rawCsv, onConfirm, onCancel, projectM
                 }}
                 style={{ ...STYLE.btn('primary') }}
               >
-                Next →
+                {t(lang, 'next')}
               </button>
             )}
           </div>

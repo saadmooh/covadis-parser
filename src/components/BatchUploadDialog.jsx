@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { isMultiSectionCsv, parseMultiSectionCsv, parseCsvText, mapCsvToEpanetData } from '../utils/csvAutoDetector.js'
 import CsvMappingDialog from './CsvMappingDialog.jsx'
+import { t, STATUS_LABELS } from '../utils/translations.js'
 
 const STYLE = {
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 },
@@ -15,9 +16,15 @@ const STYLE = {
   fileItem: (active, status) => ({ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', cursor: 'pointer', fontSize: 12, borderBottom: '1px solid #f0f0f0', background: active ? '#e8f4fd' : '#fff', borderLeft: `3px solid ${status === 'validated' ? '#28a745' : status === 'type_needed' ? '#ffc107' : status === 'type_selected' ? '#17a2b8' : '#dee2e6'}`, transition: 'all 0.15s' }),
   statusIcon: (s) => ({ pending: '⚪', type_needed: '🔴', type_selected: '🟡', mapping_incomplete: '🟡', validated: '🟢' }[s] || '⚪'),
   btn: (v) => ({ padding: '8px 16px', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 13, background: v === 'primary' ? '#28a745' : v === 'info' ? '#2c7bb6' : '#6c757d', color: '#fff' }),
+  langBtn: (active) => ({ padding: '4px 10px', border: `1px solid ${active ? '#2c7bb6' : '#ccc'}`, borderRadius: 4, cursor: 'pointer', fontWeight: active ? 700 : 400, fontSize: 11, background: active ? '#e8f4fd' : '#fff', color: active ? '#2c7bb6' : '#666', transition: 'all 0.15s' }),
 }
 
-const STATUS_LABELS = { pending: 'Pending Review', type_needed: 'Needs type selection', type_selected: 'Type selected', mapping_incomplete: 'Mapping incomplete', validated: 'Reviewed ✓' }
+const LANG_OPTIONS = [
+  { code: 'en', label: 'EN' },
+  { code: 'fr', label: 'FR' },
+  { code: 'ar', label: 'عربي' },
+]
+
 const EMPTY = { junctions: [], pipes: [], valves: [], pumps: [], tanks: [], reservoirs: [], coordinates: [], patterns: [], curves: [], controls: [], status: [] }
 
 export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
@@ -25,6 +32,10 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
   const [activeIndex, setActiveIndex] = useState(0)
   const [showMapping, setShowMapping] = useState(false)
   const [preprocessing, setPreprocessing] = useState(true)
+  const [lang, setLang] = useState('en')
+
+  const labels = STATUS_LABELS(lang)
+  const rtl = lang === 'ar'
 
   const updateFile = useCallback((i, u) => { setFileStates(p => { const n = [...p]; n[i] = { ...n[i], ...u }; return n }) }, [])
 
@@ -125,27 +136,34 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
 
   return (
     <div style={STYLE.overlay}>
-      <div style={STYLE.dialog}>
+      <div style={{ ...STYLE.dialog, direction: rtl ? 'rtl' : 'ltr' }}>
         <div style={STYLE.header}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 15 }}>📋 Batch File Review</h3>
+            <h3 style={{ margin: 0, fontSize: 15 }}>{t(lang, 'batchTitle')}</h3>
             <div style={STYLE.progress}>
-              <span>File {activeIndex + 1} of {files.length}</span>
+              <span>{t(lang, 'fileOf', activeIndex + 1, files.length)}</span>
               <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>{fileStates.map((f, i) => <div key={f.id} style={STYLE.dot(i === activeIndex, f.status === 'validated')} />)}</div>
               <span style={{ color: '#6c757d', fontSize: 11 }}>({vCount}/{files.length})</span>
             </div>
           </div>
-          <button onClick={onCancel} style={STYLE.btn('secondary')}>Cancel</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {LANG_OPTIONS.map(l => (
+                <button key={l.code} onClick={() => setLang(l.code)} style={STYLE.langBtn(lang === l.code)}>{l.label}</button>
+              ))}
+            </div>
+            <button onClick={onCancel} style={STYLE.btn('secondary')}>{t(lang, 'cancel')}</button>
+          </div>
         </div>
         <div style={STYLE.body}>
           <div style={STYLE.sidebar}>
-            {preprocessing && <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: '#6c757d' }}>Analyzing files...</div>}
+            {preprocessing && <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: '#6c757d' }}>{t(lang, 'analyzing')}</div>}
             {fileStates.map((e, i) => (
               <div key={e.id} style={STYLE.fileItem(i === activeIndex, e.status)} onClick={() => { setActiveIndex(i); if (!e.isMultiSection && e.status !== 'validated') setShowMapping(true); else setShowMapping(false) }}>
                 <span>{STYLE.statusIcon(e.status)}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: i === activeIndex ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</div>
-                  <div style={{ fontSize: 10, color: '#6c757d', marginTop: 2 }}>{STATUS_LABELS[e.status]}{e.detectedType && e.detectedType !== 'MULTI' && <span> — {e.detectedType}</span>}</div>
+                  <div style={{ fontSize: 10, color: '#6c757d', marginTop: 2 }}>{labels[e.status]}{e.detectedType && e.detectedType !== 'MULTI' && <span> — {e.detectedType}</span>}</div>
                 </div>
               </div>
             ))}
@@ -156,22 +174,22 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                   <h4 style={{ margin: 0, fontSize: 15 }}>{active.name}</h4>
                   {STYLE.statusIcon(active.status)}
-                  <span style={{ fontSize: 12, color: '#6c757d' }}>{STATUS_LABELS[active.status]}</span>
+                  <span style={{ fontSize: 12, color: '#6c757d' }}>{labels[active.status]}</span>
                 </div>
                 {active.isMultiSection && active.multiData && (
                   <div style={{ padding: 14, background: '#f8f9fa', borderRadius: 6, fontSize: 12 }}>
-                    <p style={{ margin: '0 0 8px', fontWeight: 600 }}>Unified flat file — Auto-analyzed</p>
+                    <p style={{ margin: '0 0 8px', fontWeight: 600 }}>{t(lang, 'unifiedFile')}</p>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                      {Object.entries(active.multiData.sectionSummary || {}).map(([s, info]) => <div key={s} style={{ padding: '4px 8px', background: '#fff', borderRadius: 4, border: '1px solid #e0e0e0' }}><strong>{s}</strong>: {info.rowCount} rows</div>)}
+                      {Object.entries(active.multiData.sectionSummary || {}).map(([s, info]) => <div key={s} style={{ padding: '4px 8px', background: '#fff', borderRadius: 4, border: '1px solid #e0e0e0' }}><strong>{s}</strong>: {t(lang, 'rows', info.rowCount)}</div>)}
                     </div>
-                    <p style={{ margin: '8px 0 0', color: '#28a745', fontSize: 11 }}>✅ Ready — No manual review needed</p>
+                    <p style={{ margin: '8px 0 0', color: '#28a745', fontSize: 11 }}>✅ {t(lang, 'readyNoReview')}</p>
                   </div>
                 )}
-                {!active.isMultiSection && active.status === 'validated' && <div style={{ padding: 14, background: '#d4edda', borderRadius: 6, fontSize: 12, color: '#155724' }}>✅ File reviewed — Mapping saved</div>}
+                {!active.isMultiSection && active.status === 'validated' && <div style={{ padding: 14, background: '#d4edda', borderRadius: 6, fontSize: 12, color: '#155724' }}>✅ {t(lang, 'fileReviewed')}</div>}
                 {!active.isMultiSection && active.status !== 'validated' && (
                   <div style={{ padding: 14, background: '#f8f9fa', borderRadius: 6, fontSize: 12 }}>
-                    <p style={{ margin: '0 0 10px', fontWeight: 500 }}>This step is only for column mapping</p>
-                    <button onClick={() => setShowMapping(true)} style={STYLE.btn('info')}>Review Column Mapping</button>
+                    <p style={{ margin: '0 0 10px', fontWeight: 500 }}>{t(lang, 'columnMappingOnly')}</p>
+                    <button onClick={() => setShowMapping(true)} style={STYLE.btn('info')}>{t(lang, 'reviewMapping')}</button>
                   </div>
                 )}
               </div>
@@ -179,16 +197,16 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
           </div>
         </div>
         <div style={STYLE.nav}>
-          <button onClick={handlePrev} disabled={!canPrev} style={{ ...STYLE.btn('secondary'), opacity: canPrev ? 1 : 0.4 }}>← Previous</button>
+          <button onClick={handlePrev} disabled={!canPrev} style={{ ...STYLE.btn('secondary'), opacity: canPrev ? 1 : 0.4 }}>{t(lang, 'previous')}</button>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {!allDone && <span style={{ fontSize: 11, color: '#856404' }}>{vCount}/{files.length} files reviewed</span>}
+            {!allDone && <span style={{ fontSize: 11, color: '#856404' }}>{t(lang, 'filesReviewed', vCount, files.length)}</span>}
             {isLastStep && allDone && (
               <button onClick={buildAndDownload} style={STYLE.btn('primary')}>
-                ✅ Generate EPANET .inp
+                {t(lang, 'generateInp')}
               </button>
             )}
             {!isLastStep && (
-              <button onClick={handleNext} style={STYLE.btn('info')}>Next →</button>
+              <button onClick={handleNext} style={STYLE.btn('info')}>{t(lang, 'next')}</button>
             )}
           </div>
         </div>
@@ -196,7 +214,7 @@ export default function BatchUploadDialog({ files, onBatchConfirm, onCancel }) {
       {showMapping && active && !active.isMultiSection && active.rawContent && (
         <CsvMappingDialog key={active.id} rawCsv={active.rawContent} onConfirm={handleMappingConfirm} onCancel={handleMappingCancel}
           initialMapping={active.mapping ? { ...active.mapping, _selectedType: active.selectedType } : undefined} onStateChange={handleMappingStateChange}
-          batchMode onNext={handleNext} />
+          batchMode onNext={handleNext} lang={lang} />
       )}
     </div>
   )
